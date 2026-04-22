@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Issue {
+  id            String   @id @default(cuid())
+  sentryIssueId String   @unique
+  projectId     String
+  fingerprint   String
+  title         String
+  level         String   @default("error")
+  status        String   @default("unresolved")
+  environment   String   @default("production")
+  release       String?
+  eventCount    Int      @default(1)
+  firstSeen     DateTime
+  lastSeen      DateTime
+  culprit       String   @default("")
+  stacktrace    String?
+  tags          String   @default("{}")
+  brief         Brief?
+  decisions     Decision[]
+  suppressions  Suppression[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([fingerprint])
+}
+
+model Brief {
+  id               String   @id @default(cuid())
+  issueId          String   @unique
+  issue            Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  promptVersion    String   @default("v0.4.0")
+  lean             String   @default("investigate")
+  confidence       Float    @default(0.5)
+  summary          String
+  module           String   @default("")
+  tenantImpact     String   @default("")
+  reproductionHint String?
+  rawResponse      String   @default("")
+  parseError       Boolean  @default(false)
+  tokenCount       Int?
+  latencyMs        Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  briefId     String?
+  decision    String
+  aiLean      String?
+  responderId String   @default("responder-1")
+  jiraId      String?
+  suppressed  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([issueId])
+  @@index([decision])
+}
+
+model Suppression {
+  id            String    @id @default(cuid())
+  fingerprint   String
+  reason        String    @default("")
+  scope         String    @default("global")
+  authorId      String    @default("system")
+  createdAt     DateTime  @default(now())
+  lastMatchedAt DateTime?
+  issues        Issue[]
+
+  @@index([fingerprint])
+}

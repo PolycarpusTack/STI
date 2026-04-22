@@ -1,0 +1,208 @@
+import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server'
+
+function formatIssue(issue: {
+  id: string
+  sentryIssueId: string
+  projectId: string
+  fingerprint: string
+  title: string
+  level: string
+  status: string
+  environment: string
+  release: string | null
+  eventCount: number
+  firstSeen: Date
+  lastSeen: Date
+  culprit: string
+  stacktrace: string | null
+  tags: string
+  brief: {
+    id: string
+    issueId: string
+    promptVersion: string
+    lean: string
+    confidence: number
+    summary: string
+    module: string
+    tenantImpact: string
+    reproductionHint: string | null
+    rawResponse: string
+    parseError: boolean
+    tokenCount: number | null
+    latencyMs: number | null
+    createdAt: Date
+    updatedAt: Date
+  } | null
+  decisions: {
+    id: string
+    issueId: string
+    briefId: string | null
+    decision: string
+    aiLean: string | null
+    responderId: string
+    jiraId: string | null
+    suppressed: boolean
+    createdAt: Date
+  }[]
+}) {
+  const latestDecision = issue.decisions[0] ?? null
+
+  return {
+    id: issue.id,
+    sentryId: issue.sentryIssueId,
+    title: issue.title,
+    level: issue.level,
+    project: issue.projectId,
+    environment: issue.environment,
+    release: issue.release,
+    eventCount: issue.eventCount,
+    firstSeen: issue.firstSeen.toISOString(),
+    lastSeen: issue.lastSeen.toISOString(),
+    fingerprint: issue.fingerprint,
+    culprit: issue.culprit,
+    lean: issue.brief?.lean ?? null,
+    confidence: issue.brief?.confidence ?? null,
+    brief: issue.brief ? {
+      summary: issue.brief.summary,
+      module: issue.brief.module,
+      tenantImpact: issue.brief.tenantImpact,
+      reproductionHint: issue.brief.reproductionHint,
+      promptVersion: issue.brief.promptVersion,
+      parseError: issue.brief.parseError ? 'Failed to parse LLM response' : null,
+    } : null,
+    decision: latestDecision ? {
+      decision: latestDecision.decision,
+      responder: latestDecision.responderId,
+      timestamp: latestDecision.createdAt.toISOString(),
+    } : null,
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const view = (searchParams.get('view') as string) || 'inbox'
+    const lean = searchParams.get('lean')
+    const search = searchParams.get('search')
+    const level = searchParams.get('level')
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 200)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0)
+
+    // Build where clause
+    const where: Record<string, unknown> = {}
+
+    // Apply search filter
+    if (search) {
+      where.OR = [
+        { title: { contains: search } },
+        { culprit: { contains: search } },
+      ]
+    }
+
+    // Apply level filter
+    if (level) {
+      where.level = level
+    }
+
+    let issues
+
+    switch (view) {
+      case 'inbox': {
+        const briefFilter = lean ? { lean } : { NOT: { id: { equals: undefined } } }
+        issues = await db.issue.findMany({
+          where: {
+            ...where,
+            brief: briefFilter,
+            decisions: { none: {} },
+          },
+          include: {
+            brief: true,
+            decisions: { orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+          orderBy: { lastSeen: 'desc' },
+          take: limit,
+          skip: offset,
+        })
+        break
+      }
+
+      case 'watchlist': {
+        issues = await db.issue.findMany({
+          where: {
+            ...where,
+            decisions: { some: { decision: 'watchlist' } },
+          },
+          include: {
+            brief: true,
+            decisions: { orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        })
+        break
+      }
+
+      case 'suppressed': {
+        const suppressedFingerprints = await db.suppression.findMany({
+          select: { fingerprint: true },
+        })
+        const fpList = suppressedFingerprints.map(s => s.fingerprint)
+        issues = await db.issue.findMany({
+          where: {
+            ...where,
+            fingerprint: { in: fpList },
+          },
+          include: {
+            brief: true,
+            decisions: { orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+          orderBy: { lastSeen: 'desc' },
+          take: limit,
+          skip: offset,
+        })
+        break
+      }
+
+      case 'decided': {
+        issues = await db.issue.findMany({
+          where: {
+            ...where,
+            decisions: { some: { decision: { not: 'watchlist' } } },
+          },
+          include: {
+            brief: true,
+            decisions: { orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        })
+        break
+      }
+
+      default:
+        return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
+    }
+
+    // Apply lean filter in memory for views other than inbox
+    let filtered = issues
+    if (lean && view !== 'inbox') {
+      filtered = issues.filter(i => i.brief?.lean === lean)
+    }
+
+    const total = await db.issue.count({ where })
+
+    return NextResponse.json({
+      issues: filtered.map(formatIssue),
+      total,
+      limit,
+      offset,
+      view,
+    })
+  } catch (error) {
+    console.error('Issues fetch error:', error)
+    return NextResponse.json({ error: 'Failed to fetch issues', details: String(error) }, { status: 500 })
+  }
+}
