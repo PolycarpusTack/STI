@@ -1,29 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useCockpitStore } from "@/lib/store";
+import { useToast } from "@/hooks/use-toast";
 import type { Issue } from "./issue-list";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 function buildDescription(issue: Issue): string {
   const parts: string[] = [];
@@ -63,9 +46,7 @@ function buildDescription(issue: Issue): string {
   parts.push(`*Environment:* ${issue.environment}`);
   parts.push(`*Level:* ${issue.level}`);
   parts.push(`*Events:* ${issue.eventCount}`);
-  if (issue.release) {
-    parts.push(`*Release:* ${issue.release}`);
-  }
+  if (issue.release) parts.push(`*Release:* ${issue.release}`);
   parts.push(`*Fingerprint:* ${issue.fingerprint}`);
   parts.push("");
 
@@ -73,43 +54,29 @@ function buildDescription(issue: Issue): string {
 }
 
 export function JiraModal() {
-  const { jiraModalOpen, jiraModalIssueId, closeJiraModal } =
-    useCockpitStore();
+  const { jiraModalOpen, jiraModalIssueId, closeJiraModal } = useCockpitStore();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [jiraSubmitError, setJiraSubmitError] = useState<string | null>(null);
 
   const { data: issue } = useQuery<Issue, Error>({
     queryKey: ["issue", jiraModalIssueId],
-    queryFn: () =>
-      fetch(`/api/issues/${jiraModalIssueId}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/issues/${jiraModalIssueId}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     enabled: !!jiraModalIssueId && jiraModalOpen,
   });
-
-  // Derive default values from the issue
-  const defaultSummary = issue?.title ?? "";
-  const defaultDescription = useMemo(
-    () => (issue ? buildDescription(issue) : ""),
-    [issue]
-  );
 
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
   const [component, setComponent] = useState("");
-  const [initialized, setInitialized] = useState(false);
 
-  // Sync form fields from issue data once when it loads
-  const currentSummary = initialized ? summary : defaultSummary;
-  const currentDescription = initialized ? description : defaultDescription;
+  useEffect(() => {
+    if (issue) {
+      setSummary(issue.title);
+      setDescription(buildDescription(issue));
+    }
+  }, [issue]);
 
-  function handleSummaryChange(val: string) {
-    setInitialized(true);
-    setSummary(val);
-  }
-
-  function handleDescriptionChange(val: string) {
-    setInitialized(true);
-    setDescription(val);
-  }
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -119,102 +86,135 @@ export function JiraModal() {
         body: JSON.stringify({
           issueId: jiraModalIssueId,
           decision: "jira",
-          metadata: { summary: currentSummary, description: currentDescription, priority, component },
+          metadata: { summary, description, priority, component },
         }),
-      }).then((r) => r.json()),
-    onSuccess: () => {
+      }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    onSuccess: (data: { jiraKey?: string | null; decision?: { jiraError?: string | null } }) => {
       queryClient.invalidateQueries({ queryKey: ["issue", jiraModalIssueId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
-      setInitialized(false);
+      queryClient.invalidateQueries({ queryKey: ["decisions"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-count"] });
+
+      if (data.decision?.jiraError) {
+        setJiraSubmitError(data.decision.jiraError);
+        return;
+      }
+
+      setJiraSubmitError(null);
       setSummary("");
       setDescription("");
       setPriority("medium");
       setComponent("");
+
+      if (data.jiraKey) {
+        toast({ title: `Jira ticket created`, description: data.jiraKey });
+      }
       closeJiraModal();
     },
   });
 
   return (
-    <Dialog open={jiraModalOpen} onOpenChange={(open) => !open && closeJiraModal()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Draft Jira Ticket</DialogTitle>
-          <DialogDescription>
-            Create a Jira ticket from the AI brief. Fields are pre-filled but
-            editable.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="jira-summary">Summary</Label>
-            <Input
-              id="jira-summary"
-              value={currentSummary}
-              onChange={(e) => handleSummaryChange(e.target.value)}
-              placeholder="Ticket summary"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="jira-description">Description</Label>
-            <Textarea
-              id="jira-description"
-              value={currentDescription}
-              onChange={(e) => handleDescriptionChange(e.target.value)}
-              placeholder="Ticket description (Jira markup)"
-              className="min-h-[200px] font-mono text-xs"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="jira-priority">Priority</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger id="jira-priority" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="critical">Critical</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                </SelectContent>
-              </Select>
+    <DialogPrimitive.Root open={jiraModalOpen} onOpenChange={(open) => !open && closeJiraModal()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="sta-modal-overlay" />
+        <DialogPrimitive.Content
+          aria-describedby="jira-modal-desc"
+          style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "min(640px, calc(100vw - 2rem))",
+            zIndex: 51,
+          }}
+        >
+          <div className="sta-modal">
+            <div className="sta-modal-header">
+              <DialogPrimitive.Title style={{ margin: 0, font: "inherit", display: "inline" }}>
+                Draft Jira Ticket
+              </DialogPrimitive.Title>
+              {issue && (
+                <span style={{ color: "#3D4F68", marginLeft: "10px" }}>
+                  {issue.sentryId}
+                </span>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="jira-component">Component</Label>
-              <Input
-                id="jira-component"
-                value={component}
-                onChange={(e) => setComponent(e.target.value)}
-                placeholder="e.g. backend, api"
-              />
-            </div>
-          </div>
-        </div>
+            <DialogPrimitive.Description asChild>
+            <div id="jira-modal-desc" className="sta-modal-body">
+              <div>
+                <label className="sta-label">Summary</label>
+                <input
+                  className="sta-input"
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="Ticket summary"
+                />
+              </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={closeJiraModal}
-            disabled={submitMutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending || !currentSummary}
-          >
-            {submitMutation.isPending && (
-              <Loader2 className="size-4 animate-spin" />
+              <div>
+                <label className="sta-label">Description</label>
+                <textarea
+                  className="sta-textarea"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Jira markup description"
+                  rows={10}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label className="sta-label">Priority</label>
+                  <select
+                    className="sta-select"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                  >
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="sta-label">Component</label>
+                  <input
+                    className="sta-input"
+                    value={component}
+                    onChange={(e) => setComponent(e.target.value)}
+                    placeholder="e.g. backend, api"
+                  />
+                </div>
+              </div>
+            </div>
+            </DialogPrimitive.Description>
+
+            {jiraSubmitError && (
+              <div style={{
+                margin: "0 0 12px", padding: "8px 12px", borderRadius: "3px",
+                background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.25)",
+                fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#F87171",
+              }}>
+                Jira error: {jiraSubmitError}
+              </div>
             )}
-            Submit &amp; Close Issue
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+            <div className="sta-modal-footer">
+              <button className="sta-btn" onClick={closeJiraModal} disabled={submitMutation.isPending}>
+                Cancel
+              </button>
+              <button
+                className="sta-btn primary"
+                onClick={() => submitMutation.mutate()}
+                disabled={submitMutation.isPending || !summary}
+              >
+                {submitMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+                Submit &amp; Close Issue
+              </button>
+            </div>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

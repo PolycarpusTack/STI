@@ -2,32 +2,13 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ShieldOff } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useCockpitStore } from "@/lib/store";
 import type { Issue } from "./issue-list";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export function SuppressModal() {
-  const { suppressModalOpen, suppressModalIssueId, closeSuppressModal } =
-    useCockpitStore();
+  const { suppressModalOpen, suppressModalIssueId, closeSuppressModal } = useCockpitStore();
   const queryClient = useQueryClient();
 
   const [reason, setReason] = useState("");
@@ -35,14 +16,12 @@ export function SuppressModal() {
 
   const { data: issue } = useQuery<Issue, Error>({
     queryKey: ["issue", suppressModalIssueId],
-    queryFn: () =>
-      fetch(`/api/issues/${suppressModalIssueId}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/issues/${suppressModalIssueId}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     enabled: !!suppressModalIssueId && suppressModalOpen,
   });
 
   const suppressMutation = useMutation({
     mutationFn: async () => {
-      // Create suppression
       await fetch("/api/suppressions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,10 +29,9 @@ export function SuppressModal() {
           fingerprint: issue?.fingerprint,
           reason,
           scope,
+          tenantValue: scope === "tenant" ? (issue?.project ?? null) : null,
         }),
       });
-
-      // Record decision as close
       await fetch("/api/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,84 +47,98 @@ export function SuppressModal() {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.invalidateQueries({ queryKey: ["suppressions"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-count"] });
+      queryClient.invalidateQueries({ queryKey: ["decisions"] });
       setReason("");
       setScope("global");
       closeSuppressModal();
     },
-    onError: () => {
-      // keep modal open on error
-    },
   });
 
   return (
-    <AlertDialog open={suppressModalOpen} onOpenChange={(open) => !open && closeSuppressModal()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <ShieldOff className="size-5 text-destructive" />
-            Suppress Issue
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-4 text-left">
+    <DialogPrimitive.Root open={suppressModalOpen} onOpenChange={(open) => !open && closeSuppressModal()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="sta-modal-overlay" />
+        <DialogPrimitive.Content
+          aria-describedby="suppress-modal-desc"
+          style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "min(480px, calc(100vw - 2rem))",
+            zIndex: 51,
+          }}
+        >
+          <div className="sta-modal">
+            <div className="sta-modal-header" style={{ color: "#F87171", borderColor: "#5c2528" }}>
+              <DialogPrimitive.Title style={{ margin: 0, font: "inherit", display: "inline" }}>
+                Suppress Fingerprint
+              </DialogPrimitive.Title>
+            </div>
+
+            <DialogPrimitive.Description asChild>
+            <div id="suppress-modal-desc" className="sta-modal-body">
               {issue?.fingerprint && (
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Fingerprint
-                  </span>
-                  <p className="text-xs font-mono bg-muted/50 rounded p-2 break-all">
+                <div>
+                  <label className="sta-label">Fingerprint</label>
+                  <div style={{
+                    fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#2DD4BF",
+                    background: "#0B0F19", border: "1px solid #1C2333",
+                    borderRadius: "2px", padding: "7px 10px", wordBreak: "break-all",
+                  }}>
                     {issue.fingerprint}
-                  </p>
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="suppress-reason">Reason</Label>
-                <Input
-                  id="suppress-reason"
+              <div>
+                <label className="sta-label">Reason</label>
+                <input
+                  className="sta-input"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="Why is this being suppressed?"
+                  autoFocus
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="suppress-scope">Scope</Label>
-                <Select
+              <div>
+                <label className="sta-label">Scope</label>
+                <select
+                  className="sta-select"
                   value={scope}
-                  onValueChange={(val) => setScope(val as "global" | "tenant")}
+                  onChange={(e) => setScope(e.target.value as "global" | "tenant")}
                 >
-                  <SelectTrigger id="suppress-scope" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">Global</SelectItem>
-                    <SelectItem value="tenant">Per-tenant</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="global">Global</option>
+                  <option value="tenant">Per-tenant</option>
+                </select>
               </div>
             </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+            </DialogPrimitive.Description>
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={suppressMutation.isPending}>
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              suppressMutation.mutate();
-            }}
-            disabled={suppressMutation.isPending || !reason}
-            className="bg-destructive text-white hover:bg-destructive/90"
-          >
-            {suppressMutation.isPending && (
-              <Loader2 className="size-4 animate-spin" />
-            )}
-            Suppress
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            <div className="sta-modal-footer">
+              <button
+                className="sta-btn"
+                onClick={closeSuppressModal}
+                disabled={suppressMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                className="sta-btn danger"
+                onClick={() => suppressMutation.mutate()}
+                disabled={suppressMutation.isPending || !reason}
+                style={{
+                  color: "#F87171", borderColor: "#7A1515",
+                  background: "rgba(248,113,113,0.06)",
+                }}
+              >
+                {suppressMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+                Suppress
+              </button>
+            </div>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
