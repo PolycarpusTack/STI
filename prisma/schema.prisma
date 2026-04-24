@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -30,6 +31,8 @@ model Issue {
   updatedAt     DateTime @updatedAt
 
   @@index([fingerprint])
+  @@index([lastSeen])
+  @@index([level])
 }
 
 model Brief {
@@ -39,32 +42,52 @@ model Brief {
   promptVersion    String   @default("v0.4.0")
   lean             String   @default("investigate")
   confidence       Float    @default(0.5)
+  priority         String   @default("")
+  issueType        String   @default("")
   summary          String
   module           String   @default("")
   tenantImpact     String   @default("")
   reproductionHint String?
+  confidenceNotes  String?
+  signals          String?
   rawResponse      String   @default("")
   parseError       Boolean  @default(false)
   tokenCount       Int?
   latencyMs        Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@index([lean])
 }
 
 model Decision {
-  id          String   @id @default(cuid())
-  issueId     String
-  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  briefId     String?
-  decision    String
-  aiLean      String?
-  responderId String   @default("responder-1")
-  jiraId      String?
-  suppressed  Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  issueId          String
+  issue            Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  briefId          String?
+  decision         String
+  aiLean           String?
+  responderId      String   @default("responder-1")
+  jiraId           String?
+  jiraKey          String?
+  jiraSummary      String?
+  jiraDescription  String?
+  jiraPriority     String?
+  jiraComponent    String?
+  jiraError        String?
+  suppressReason   String?
+  suppressScope    String?
+  suppressed       Boolean  @default(false)
+  createdAt        DateTime @default(now())
 
   @@index([issueId])
   @@index([decision])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model Suppression {
@@ -72,6 +95,7 @@ model Suppression {
   fingerprint   String
   reason        String    @default("")
   scope         String    @default("global")
+  tenantValue   String?
   authorId      String    @default("system")
   createdAt     DateTime  @default(now())
   lastMatchedAt DateTime?
