@@ -201,6 +201,7 @@ export async function GET(request: NextRequest) {
         issues = await db.issue.findMany({
           where: {
             ...where,
+            ...(lean ? { brief: { lean } } : {}),
             decisions: {
               some: { decision: 'watchlist' },
               none: { decision: { in: ['jira', 'close', 'investigate'] } },

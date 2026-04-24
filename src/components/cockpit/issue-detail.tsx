@@ -26,7 +26,7 @@ export function IssueDetail() {
       fetch("/api/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issueId, decision }),
+        body: JSON.stringify({ issueId, decision, responderId: 'responder-1' }),
       }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["issue", selectedIssueId] });

@@ -34,8 +34,11 @@ export async function GET() {
     let disagreementRate = 0
     const actionable = await db.decision.findMany({
       where: {
-        aiLean: { not: null, notIn: ['watchlist'] },
-        decision: { not: 'watchlist' },
+        AND: [
+          { aiLean: { not: null } },
+          { aiLean: { not: 'watchlist' } },
+          { decision: { not: 'watchlist' } },
+        ],
       },
       select: { decision: true, aiLean: true },
       orderBy: { createdAt: 'desc' },
