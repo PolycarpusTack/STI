@@ -228,17 +228,25 @@ export function IssueList() {
     if (!filters.search) setLocalSearch("");
   }, [filters.search]);
 
+  const { data: sentryProjects = [] } = useQuery<{ id: string; slug: string }[]>({
+    queryKey: ["sentry-projects"],
+    queryFn: () => fetch("/api/sentry-projects").then((r) => r.json()),
+    staleTime: 60_000,
+  });
+
   const [limit, setLimit] = useState(50);
   // Reset limit when view or filters change.
-  useEffect(() => { setLimit(50); }, [currentView, filters.lean, filters.search, filters.level]);
+  useEffect(() => { setLimit(50); }, [currentView, filters.lean, filters.search, filters.level, filters.project, filters.since24h]);
 
   const params = new URLSearchParams({ view: currentView, limit: String(limit) });
   if (filters.lean) params.set("lean", filters.lean);
   if (filters.search) params.set("search", filters.search);
   if (filters.level) params.set("level", filters.level);
+  if (filters.project) params.set("project", filters.project);
+  if (filters.since24h) params.set("since", "24h");
 
   const { data, isLoading, isError } = useQuery<IssuesResponse, Error>({
-    queryKey: ["issues", currentView, filters.lean, filters.search, filters.level, limit],
+    queryKey: ["issues", currentView, filters.lean, filters.search, filters.level, filters.project, filters.since24h, limit],
     queryFn: () => fetch(`/api/issues?${params.toString()}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     staleTime: 10_000,
   });
@@ -335,6 +343,33 @@ export function IssueList() {
           onBlur={(e) => { e.currentTarget.style.borderColor = "#1F2D45"; }}
         />
       </div>
+
+      {/* Project / time-range filter */}
+      {sentryProjects.length > 0 && (
+        <div style={{ padding: "8px 14px", borderBottom: "1px solid #1F2D45", flexShrink: 0 }}>
+          <select
+            className="sta-select"
+            value={filters.since24h ? "__24h__" : (filters.project ?? "")}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__24h__") {
+                setFilters({ project: null, since24h: true });
+              } else if (v === "") {
+                setFilters({ project: null, since24h: false });
+              } else {
+                setFilters({ project: v, since24h: false });
+              }
+            }}
+            style={{ width: "100%" }}
+          >
+            <option value="">All projects</option>
+            {sentryProjects.map((p) => (
+              <option key={p.id} value={p.slug}>{p.slug}</option>
+            ))}
+            <option value="__24h__">Last 24h — all projects</option>
+          </select>
+        </div>
+      )}
 
       {/* Lean filter chips */}
       <div style={{
