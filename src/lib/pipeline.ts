@@ -13,6 +13,7 @@ import { getEffectiveSetting, SETTINGS_KEYS } from "@/lib/settings";
 
 const COLD_START_HOURS = 24;
 const BRIEF_CONCURRENCY = 3;
+const EVENT_CONCURRENCY = 5;
 
 export interface PipelineStats {
   ingested: number;
@@ -49,53 +50,62 @@ export async function ingestIssues(opts: {
   const suppressedFps = new Set(suppressions.map((s) => s.fingerprint));
   const newIssueIds: string[] = [];
 
-  for (const si of sentryIssues) {
-    try {
-      const fingerprint = si.fingerprints[0] ?? si.id;
-      if (suppressedFps.has(fingerprint)) { stats.suppressed++; continue; }
+  for (let i = 0; i < sentryIssues.length; i += EVENT_CONCURRENCY) {
+    const batch = sentryIssues.slice(i, i + EVENT_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (si) => {
+        try {
+          const fingerprint = si.fingerprints[0] ?? si.id;
+          if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
 
-      const event = await fetchLatestEvent(si.id, opts.token);
-      const rawStacktrace = extractStacktrace(event);
-      const environment = extractEnvironment(si, event);
-      const release = extractRelease(event);
+          const event = await fetchLatestEvent(si.id, opts.token);
+          const rawStacktrace = extractStacktrace(event);
+          const environment = extractEnvironment(si, event);
+          const release = extractRelease(event);
 
-      const issue = await db.issue.upsert({
-        where: { sentryIssueId: si.id },
-        create: {
-          sentryIssueId: si.id,
-          projectId: si.project.slug,
-          fingerprint,
-          title: scrub(si.title),
-          level: si.level,
-          status: si.status,
-          environment,
-          release,
-          eventCount: parseInt(si.count, 10),
-          firstSeen: new Date(si.firstSeen),
-          lastSeen: new Date(si.lastSeen),
-          culprit: scrub(si.culprit ?? ""),
-          stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
-          tags: JSON.stringify(si.tags),
-        },
-        update: {
-          eventCount: parseInt(si.count, 10),
-          lastSeen: new Date(si.lastSeen),
-          status: si.status,
-        },
-      });
+          const issue = await db.issue.upsert({
+            where: { sentryIssueId: si.id },
+            create: {
+              sentryIssueId: si.id,
+              projectId: si.project.slug,
+              fingerprint,
+              title: scrub(si.title),
+              level: si.level,
+              status: si.status,
+              environment,
+              release,
+              eventCount: parseInt(si.count, 10),
+              firstSeen: new Date(si.firstSeen),
+              lastSeen: new Date(si.lastSeen),
+              culprit: scrub(si.culprit ?? ""),
+              stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
+              tags: JSON.stringify(si.tags),
+            },
+            update: {
+              eventCount: parseInt(si.count, 10),
+              lastSeen: new Date(si.lastSeen),
+              status: si.status,
+              environment,
+              release,
+              stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
+              tags: JSON.stringify(si.tags),
+            },
+          });
 
-      stats.ingested++;
+          stats.ingested++;
 
-      const hasBrief = await db.brief.findUnique({
-        where: { issueId: issue.id },
-        select: { id: true },
-      });
-      if (!hasBrief) newIssueIds.push(issue.id);
-      else stats.skipped++;
-    } catch (err) {
-      console.error(`[pipeline] Issue ${si.id} failed:`, err);
-      stats.errors++;
-    }
+          const hasBrief = await db.brief.findUnique({
+            where: { issueId: issue.id },
+            select: { id: true },
+          });
+          if (!hasBrief) newIssueIds.push(issue.id);
+          else stats.skipped++;
+        } catch (err) {
+          console.error(`[pipeline] Issue ${si.id} failed:`, err);
+          stats.errors++;
+        }
+      })
+    );
   }
 
   return { stats, newIssueIds };
