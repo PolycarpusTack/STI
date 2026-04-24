@@ -160,6 +160,12 @@ export async function GET(request: NextRequest) {
       where.level = level
     }
 
+    const projectParam = searchParams.get('project')
+    const sinceParam = searchParams.get('since')
+
+    if (projectParam) where.projectId = projectParam
+    if (sinceParam === '24h') where.lastSeen = { gte: new Date(Date.now() - 86_400_000) }
+
     let issues
     let inboxGlobalFps: string[] | undefined
     let suppressedFps: string[] | undefined

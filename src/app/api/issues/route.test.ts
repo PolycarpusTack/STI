@@ -193,3 +193,67 @@ describe("GET /api/issues — tenant-scoped suppression", () => {
     expect(notIn).not.toContain("fp-tenant-only");
   });
 });
+
+// ── Project filter ─────────────────────────────────────────────────────────────
+
+describe("GET /api/issues — project filter", () => {
+  beforeEach(() => {
+    mockIssueFindMany.mockReset();
+    mockIssueFindMany.mockResolvedValue([]);
+    mockSuppressionFindMany.mockReset();
+    mockSuppressionFindMany.mockResolvedValue([]);
+    mockIssueCount.mockReset();
+    mockIssueCount.mockResolvedValue(0);
+  });
+
+  test("passes projectId filter to DB when project param is provided", async () => {
+    await GET(makeRequest({ view: "inbox", project: "my-proj" }));
+    const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(callArg.where.projectId).toBe("my-proj");
+  });
+
+  test("does not add projectId to where clause when project param is absent", async () => {
+    await GET(makeRequest({ view: "inbox" }));
+    const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(callArg.where.projectId).toBeUndefined();
+  });
+});
+
+// ── since=24h filter ───────────────────────────────────────────────────────────
+
+describe("GET /api/issues — since=24h filter", () => {
+  beforeEach(() => {
+    mockIssueFindMany.mockReset();
+    mockIssueFindMany.mockResolvedValue([]);
+    mockSuppressionFindMany.mockReset();
+    mockSuppressionFindMany.mockResolvedValue([]);
+    mockIssueCount.mockReset();
+    mockIssueCount.mockResolvedValue(0);
+  });
+
+  test("adds lastSeen gte filter when since=24h", async () => {
+    const before = Date.now();
+    await GET(makeRequest({ view: "inbox", since: "24h" }));
+    const after = Date.now();
+
+    const callArg = mockIssueFindMany.mock.calls[0][0] as {
+      where: { lastSeen?: { gte: Date } };
+    };
+    expect(callArg.where.lastSeen).toBeDefined();
+    const cutoff = callArg.where.lastSeen!.gte.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before - 86_400_000);
+    expect(cutoff).toBeLessThanOrEqual(after - 86_400_000 + 100);
+  });
+
+  test("does not add lastSeen filter when since param is absent", async () => {
+    await GET(makeRequest({ view: "inbox" }));
+    const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(callArg.where.lastSeen).toBeUndefined();
+  });
+
+  test("ignores unrecognised since values", async () => {
+    await GET(makeRequest({ view: "inbox", since: "7d" }));
+    const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(callArg.where.lastSeen).toBeUndefined();
+  });
+});
