@@ -15,13 +15,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
-  if (!slug) {
-    return NextResponse.json({ error: "slug is required" }, { status: 400 });
-  }
-  const label = typeof body.label === "string" ? body.label.trim() : "";
   try {
+    const body = await req.json();
+    const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+    if (!slug) {
+      return NextResponse.json({ error: "slug is required" }, { status: 400 });
+    }
+    const label = typeof body.label === "string" ? body.label.trim() : "";
     const project = await db.sentryProject.create({ data: { slug, label } });
     return NextResponse.json(project, { status: 201 });
   } catch (error) {

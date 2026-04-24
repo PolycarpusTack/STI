@@ -57,6 +57,12 @@ describe("GET /api/sentry-projects", () => {
     expect(body).toHaveLength(2);
     expect(body[0].slug).toBe("proj-a");
   });
+
+  test("returns 500 when DB throws", async () => {
+    mockFindMany.mockRejectedValue(new Error("DB error"));
+    const res = await GET();
+    expect(res.status).toBe(500);
+  });
 });
 
 describe("POST /api/sentry-projects", () => {
@@ -87,6 +93,12 @@ describe("POST /api/sentry-projects", () => {
     const res = await POST(makeRequest("POST", { slug: "duplicate" }));
     expect(res.status).toBe(409);
   });
+
+  test("returns 500 for non-P2002 DB errors", async () => {
+    mockCreate.mockRejectedValue(new Error("DB locked"));
+    const res = await POST(makeRequest("POST", { slug: "any-slug" }));
+    expect(res.status).toBe(500);
+  });
 });
 
 describe("DELETE /api/sentry-projects/[id]", () => {
@@ -110,5 +122,13 @@ describe("DELETE /api/sentry-projects/[id]", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
+  });
+
+  test("returns 500 when DB throws on delete", async () => {
+    mockFindUnique.mockResolvedValue({ id: "p1", slug: "my-project" });
+    mockDelete.mockRejectedValue(new Error("DB error"));
+    const { request, params } = makeDeleteRequest("p1");
+    const res = await DELETE(request, { params });
+    expect(res.status).toBe(500);
   });
 });
