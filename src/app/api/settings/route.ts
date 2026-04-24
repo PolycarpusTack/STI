@@ -5,10 +5,9 @@ import { getSetting, setSetting, SETTINGS_KEYS } from "@/lib/settings";
 const TOKEN_MASK = "••••••••";
 
 export async function GET() {
-  const [token, org, project, interval, llmBaseUrl, llmApiKey, llmModel, jiraBaseUrl, jiraEmail, jiraApiKey, jiraProjectKey] = await Promise.all([
+  const [token, org, interval, llmBaseUrl, llmApiKey, llmModel, jiraBaseUrl, jiraEmail, jiraApiKey, jiraProjectKey] = await Promise.all([
     getSetting(SETTINGS_KEYS.sentryToken),
     getSetting(SETTINGS_KEYS.sentryOrg),
-    getSetting(SETTINGS_KEYS.sentryProject),
     getSetting(SETTINGS_KEYS.pollIntervalMinutes),
     getSetting(SETTINGS_KEYS.llmBaseUrl),
     getSetting(SETTINGS_KEYS.llmApiKey),
@@ -23,7 +22,6 @@ export async function GET() {
     sentryToken: token ? TOKEN_MASK : null,
     sentryTokenSet: !!token,
     sentryOrg: org ?? process.env.SENTRY_ORG ?? "",
-    sentryProject: project ?? process.env.SENTRY_PROJECT ?? "",
     pollIntervalMinutes: parseInt(interval ?? process.env.POLL_INTERVAL_MINUTES ?? "10", 10),
     llmBaseUrl: llmBaseUrl ?? process.env.LLM_BASE_URL ?? "",
     llmApiKey: llmApiKey ? TOKEN_MASK : null,
@@ -47,9 +45,6 @@ export async function PUT(req: NextRequest) {
   }
   if (typeof body.sentryOrg === "string") {
     updates.push(setSetting(SETTINGS_KEYS.sentryOrg, body.sentryOrg.trim()));
-  }
-  if (typeof body.sentryProject === "string") {
-    updates.push(setSetting(SETTINGS_KEYS.sentryProject, body.sentryProject.trim()));
   }
   if (typeof body.pollIntervalMinutes === "number" && body.pollIntervalMinutes > 0) {
     updates.push(setSetting(SETTINGS_KEYS.pollIntervalMinutes, String(body.pollIntervalMinutes)));

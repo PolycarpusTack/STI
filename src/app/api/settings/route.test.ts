@@ -46,7 +46,6 @@ describe("GET /api/settings — Jira fields", () => {
     mockGetSetting
       .mockResolvedValueOnce(null)   // sentryToken
       .mockResolvedValueOnce(null)   // sentryOrg
-      .mockResolvedValueOnce(null)   // sentryProject
       .mockResolvedValueOnce(null)   // pollIntervalMinutes
       .mockResolvedValueOnce(null)   // llmBaseUrl
       .mockResolvedValueOnce(null)   // llmApiKey

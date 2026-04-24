@@ -168,6 +168,22 @@ describe("ingestIssues — fingerprint fallback", () => {
     expect(mockIssueUpsert).not.toHaveBeenCalled();
   });
 
+  test("continues to next project when fetch fails for one project", async () => {
+    const multiOpts = { token: "tok", org: "org", projects: ["proj-a", "proj-b"] };
+    const issue2 = makeSentryIssue("S-2", ["fp-2"]);
+    globalThis.fetch = mock()
+      .mockImplementationOnce(() => Promise.reject(new Error("403 Forbidden")))  // proj-a fails
+      .mockImplementationOnce(() => jsonResponse([issue2]))                        // proj-b list
+      .mockImplementationOnce(() => jsonResponse({}));                             // fetchLatestEvent for S-2
+    mockIssueUpsert.mockResolvedValue({ id: "issue-2", sentryIssueId: "S-2" });
+
+    const { stats } = await ingestIssues(multiOpts);
+
+    expect(stats.errors).toBe(1);
+    expect(stats.ingested).toBe(1);
+    expect(mockIssueUpsert).toHaveBeenCalledTimes(1);
+  });
+
   test("ingests issues from multiple projects in sequence", async () => {
     const multiOpts = { token: "tok", org: "org", projects: ["proj-a", "proj-b"] };
     const issue1 = makeSentryIssue("S-1", ["fp-1"]);
