@@ -305,6 +305,16 @@ const suppressions: { fingerprint: string; reason: string; scope: string }[] = [
 ]
 
 export async function POST() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Seed disabled in production' }, { status: 403 })
+  }
+  if (process.env.SEED_ENABLED !== 'true') {
+    return NextResponse.json(
+      { error: 'Set SEED_ENABLED=true in your .env to enable seeding' },
+      { status: 403 }
+    )
+  }
+
   try {
     // Clear existing data (idempotent)
     await db.decision.deleteMany()
