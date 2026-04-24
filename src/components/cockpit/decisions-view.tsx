@@ -2,32 +2,10 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Download,
-  Filter,
-  AlertTriangle,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AlertTriangle, Download } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { formatDateTime } from "@/lib/format";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +19,10 @@ interface Decision {
   responder: string;
   timestamp: string;
   disagreement: boolean;
+  jiraKey: string | null;
+  jiraSummary: string | null;
+  suppressReason: string | null;
+  suppressScope: string | null;
 }
 
 interface DecisionsResponse {
@@ -50,37 +32,19 @@ interface DecisionsResponse {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const leanBadgeStyles: Record<string, string> = {
-  jira: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
-  close: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
-  investigate: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
-  watchlist: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
-};
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString();
+function csvCell(val: string): string {
+  if (/[",\n\r]/.test(val)) return `"${val.replace(/"/g, '""')}"`;
+  return val;
 }
 
 function downloadCSV(decisions: Decision[]) {
-  const headers = [
-    "Timestamp",
-    "Issue Title",
-    "Sentry ID",
-    "AI Lean",
-    "Human Decision",
-    "Responder",
-    "Disagreement",
-  ];
+  const headers = ["Timestamp", "Issue Title", "Sentry ID", "AI Lean", "Human Decision", "Responder", "Disagreement", "Jira Key", "Suppress Reason"];
   const rows = decisions.map((d) => [
-    d.timestamp,
-    `"${d.issueTitle.replace(/"/g, '""')}"`,
-    d.sentryId,
-    d.aiLean ?? "",
-    d.humanDecision,
-    d.responder,
-    d.disagreement ? "Yes" : "No",
-  ]);
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    d.timestamp, d.issueTitle, d.sentryId,
+    d.aiLean ?? "", d.humanDecision, d.responder, d.disagreement ? "Yes" : "No",
+    d.jiraKey ?? "", d.suppressReason ?? "",
+  ].map(csvCell));
+  const csv = [headers.map(csvCell).join(","), ...rows.map((r) => r.join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -93,18 +57,14 @@ function downloadCSV(decisions: Decision[]) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function DecisionsView() {
-  const [responderFilter, setResponderFilter] = useState<string>("all");
   const [disagreementOnly, setDisagreementOnly] = useState(false);
 
-  const params = new URLSearchParams();
-  params.set("limit", "100");
-  if (responderFilter !== "all") params.set("responder", responderFilter);
+  const params = new URLSearchParams({ limit: "200" });
   if (disagreementOnly) params.set("disagreement", "true");
 
   const { data, isLoading, isError } = useQuery<DecisionsResponse, Error>({
-    queryKey: ["decisions", responderFilter, disagreementOnly],
-    queryFn: () =>
-      fetch(`/api/decisions?${params.toString()}`).then((r) => r.json()),
+    queryKey: ["decisions", disagreementOnly],
+    queryFn: () => fetch(`/api/decisions?${params.toString()}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     staleTime: 15_000,
   });
 
@@ -112,138 +72,153 @@ export function DecisionsView() {
   const total = data?.total ?? 0;
 
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
-      <div className="px-4 py-3 border-b shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-sm font-semibold">Decisions Log</h2>
-            <p className="text-xs text-muted-foreground">
-              {total} decisions recorded
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
+      <div style={{
+        padding: "14px 24px", borderBottom: "1px solid #1F2D45",
+        background: "#111827", flexShrink: 0,
+        display: "flex", alignItems: "center", gap: "12px",
+      }}>
+        <div>
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px",
+            letterSpacing: "0.12em", textTransform: "uppercase", color: "#9BAAC4",
+          }}>
+            Decisions Log
+          </span>
+          <span style={{ fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#3D4F68", marginLeft: "10px" }}>
+            {total}
+          </span>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+          <button
+            className="sta-btn"
+            onClick={() => setDisagreementOnly(!disagreementOnly)}
+            style={{
+              color: disagreementOnly ? "#F87171" : undefined,
+              borderColor: disagreementOnly ? "#7A1515" : undefined,
+              background: disagreementOnly ? "rgba(248,113,113,0.06)" : undefined,
+            }}
+          >
+            <AlertTriangle size={12} />
+            Disagreements only
+          </button>
+          <button
+            className="sta-btn"
             onClick={() => decisions.length > 0 && downloadCSV(decisions)}
             disabled={decisions.length === 0}
           >
-            <Download className="size-3.5 mr-1.5" />
+            <Download size={12} />
             Export CSV
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Select value={responderFilter} onValueChange={setResponderFilter}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Responder" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Responders</SelectItem>
-              <SelectItem value="human">Human</SelectItem>
-              <SelectItem value="ai">AI</SelectItem>
-              <SelectItem value="system">System</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant={disagreementOnly ? "default" : "outline"}
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setDisagreementOnly(!disagreementOnly)}
-          >
-            <AlertTriangle className="size-3.5 mr-1.5" />
-            Disagreements Only
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-hidden">
+      <div style={{ flex: 1, overflow: "hidden" }}>
         {isLoading && (
-          <div className="p-4 space-y-3">
+          <div style={{ padding: "16px" }}>
             {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+              <Skeleton key={i} className="h-10 w-full mb-2" />
             ))}
           </div>
         )}
 
         {isError && (
-          <div className="flex items-center justify-center h-full text-destructive text-sm">
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            height: "100%", fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#F87171",
+          }}>
             Failed to load decisions
           </div>
         )}
 
         {!isLoading && !isError && decisions.length === 0 && (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            No decisions found
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", height: "200px", gap: "8px",
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px",
+            letterSpacing: "0.08em", textTransform: "uppercase", color: "#3D4F68",
+          }}>
+            <span style={{ fontSize: "32px", opacity: 0.4 }}>⎙</span>
+            No decisions yet this session.
           </div>
         )}
 
         {!isLoading && !isError && decisions.length > 0 && (
           <ScrollArea className="h-full">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[180px] text-xs">Timestamp</TableHead>
-                  <TableHead className="text-xs">Issue Title</TableHead>
-                  <TableHead className="w-[80px] text-xs">AI Lean</TableHead>
-                  <TableHead className="w-[100px] text-xs">Decision</TableHead>
-                  <TableHead className="w-[80px] text-xs">Responder</TableHead>
-                  <TableHead className="w-[80px] text-xs">Disagree?</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Timestamp", "Issue", "AI Lean", "Decision", "Responder", "Disagree?"].map((h) => (
+                    <th key={h} style={{
+                      padding: "10px 14px", textAlign: "left", borderBottom: "1px solid #1F2D45",
+                      fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "10px",
+                      letterSpacing: "0.12em", textTransform: "uppercase", color: "#5E6F8A",
+                      background: "#111827", fontWeight: 500, position: "sticky", top: 0,
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
                 {decisions.map((d) => (
-                  <TableRow
+                  <tr
                     key={d.id}
-                    className={cn(d.disagreement && "bg-red-50 dark:bg-red-950/20")}
+                    style={{
+                      background: d.disagreement ? "rgba(248,113,113,0.04)" : "transparent",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#111827"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = d.disagreement ? "rgba(248,113,113,0.04)" : "transparent"; }}
                   >
-                    <TableCell className="font-mono text-xs">
-                      {formatDate(d.timestamp)}
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[300px] truncate">
-                      {d.issueTitle}
-                    </TableCell>
-                    <TableCell>
-                      {d.aiLean ? (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px] h-5 px-1.5",
-                            leanBadgeStyles[d.aiLean] ?? ""
-                          )}
-                        >
-                          {d.aiLean}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45", fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#5E6F8A" }}>
+                      {formatDateTime(d.timestamp)}
+                    </td>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45", fontSize: "13px", color: "#9BAAC4", maxWidth: "300px" }}>
+                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.issueTitle}</div>
+                      <div style={{ fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "10px", color: "#3D4F68", marginTop: "2px" }}>{d.sentryId}</div>
+                    </td>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45" }}>
+                      {d.aiLean
+                        ? <span className={`sta-lean-badge sta-lean-${d.aiLean}`}>{d.aiLean}</span>
+                        : <span style={{ color: "#3D4F68" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45" }}>
+                      <span className={`sta-lean-badge sta-lean-${d.humanDecision}`}>{d.humanDecision}</span>
+                      {d.jiraKey && (
+                        <div style={{
+                          fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "10px",
+                          color: "#2DD4BF", marginTop: "4px", letterSpacing: "0.04em",
+                        }}>
+                          {d.jiraKey}
+                        </div>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px] h-5 px-1.5",
-                          leanBadgeStyles[d.humanDecision] ?? ""
-                        )}
-                      >
-                        {d.humanDecision}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">{d.responder}</TableCell>
-                    <TableCell>
+                      {d.suppressReason && (
+                        <div style={{
+                          fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "10px",
+                          color: "#5E6F8A", marginTop: "4px", fontStyle: "italic",
+                        }}>
+                          {d.suppressReason}
+                          {d.suppressScope && ` (${d.suppressScope})`}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45", fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#5E6F8A" }}>
+                      {d.responder}
+                    </td>
+                    <td style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45" }}>
                       {d.disagreement && (
-                        <Badge variant="destructive" className="text-[10px] h-5 px-1.5">
-                          <AlertTriangle className="size-2.5 mr-0.5" />
-                          Yes
-                        </Badge>
+                        <span className="sta-disagree-tag" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <AlertTriangle size={10} />
+                          yes
+                        </span>
                       )}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </ScrollArea>
         )}
       </div>

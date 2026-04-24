@@ -1,131 +1,117 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle,
-  TrendingUp,
-  Clock,
-  FileText,
-  RefreshCw,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { relativeTime } from "@/lib/format";
+import type { Metrics } from "@/lib/types";
 
-interface Metrics {
-  queueSize: number;
-  handledToday: number;
-  disagreementRate: number;
-  lastPull: string;
-  briefsGenerated: number;
-}
-
-function formatTimestamp(ts: string): string {
-  if (!ts) return "Never";
-  const date = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  return date.toLocaleDateString();
+function Stat({
+  label,
+  value,
+  accent,
+  warn,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.1 }}>
+      <span style={{
+        fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+        fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#5E6F8A",
+      }}>
+        {label}
+      </span>
+      <span style={{
+        fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+        fontSize: "14px", fontWeight: 500,
+        color: warn ? "#F59E0B" : accent ? "#2DD4BF" : "#F0F4FF",
+      }}>
+        {value}
+      </span>
+    </div>
+  );
 }
 
 export function TopBar() {
-  const { data, isLoading, isError, dataUpdatedAt, refetch } = useQuery<
-    Metrics,
-    Error
-  >({
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, isError } = useQuery<Metrics, Error>({
     queryKey: ["metrics"],
-    queryFn: () => fetch("/api/metrics").then((r) => r.json()),
+    queryFn: () => fetch("/api/metrics").then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     refetchInterval: 30_000,
   });
 
-  const metrics = data ?? {
-    queueSize: 0,
-    handledToday: 0,
-    disagreementRate: 0,
-    lastPull: "",
-    briefsGenerated: 0,
-  };
+  const pullMutation = useMutation({
+    mutationFn: () =>
+      fetch("/api/pipeline/run", { method: "POST" }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+    },
+  });
+
+  const m = data ?? { queueSize: 0, handledToday: 0, disagreementRate: 0, lastPull: "", briefsGenerated: 0 };
 
   return (
-    <header className="flex h-12 items-center border-b bg-muted/40 px-4 gap-4 shrink-0">
-      <div className="flex items-center gap-2 font-semibold text-sm">
-        <AlertTriangle className="size-4 text-destructive" />
-        <span className="hidden sm:inline">STA Cockpit</span>
+    <header style={{
+      display: "flex", alignItems: "center",
+      padding: "0 20px",
+      background: "#111827",
+      borderBottom: "1px solid #1F2D45",
+      height: "44px",
+      gap: "24px",
+      flexShrink: 0,
+    }}>
+      {/* Brand */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "10px",
+        fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+        fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em",
+      }}>
+        <span style={{
+          width: "8px", height: "8px", background: "#2DD4BF", borderRadius: "50%",
+          boxShadow: "0 0 10px #2DD4BF", flexShrink: 0,
+          animation: "sta-pulse 2.4s ease-in-out infinite",
+          display: "inline-block",
+        }} />
+        <span style={{ color: "#F0F4FF" }}>STA</span>
+        <span style={{ color: "#5E6F8A", fontWeight: 400 }}>· Sentry Triage Assistant</span>
       </div>
 
-      <Separator orientation="vertical" className="h-6" />
+      {/* Stats */}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "24px" }}>
+        {isError && (
+          <span style={{ fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "10px", color: "#F87171" }}>
+            metrics unavailable
+          </span>
+        )}
+        <Stat label="Queue" value={isLoading ? "—" : String(m.queueSize)} />
+        <Stat label="Handled today" value={isLoading ? "—" : String(m.handledToday)} accent />
+        <Stat
+          label="Disagreement"
+          value={isLoading ? "—" : `${m.disagreementRate}%`}
+          warn={m.disagreementRate > 20}
+        />
+        <Stat label="Last pull" value={isLoading ? "—" : (m.lastPull ? relativeTime(m.lastPull) : "—")} />
+        <Stat label="Briefs" value={isLoading ? "—" : String(m.briefsGenerated)} />
 
-      <div className="flex items-center gap-1.5 text-xs">
-        <AlertTriangle className="size-3.5 text-orange-500" />
-        <span className="text-muted-foreground hidden md:inline">Queue</span>
-        <Badge
-          variant="outline"
-          className="font-mono text-xs h-5 px-1.5 min-w-[2ch] justify-center"
+        <button
+          onClick={() => pullMutation.mutate()}
+          disabled={pullMutation.isPending}
+          style={{
+            color: pullMutation.isPending ? "#2DD4BF" : "#3D4F68",
+            background: "none", border: "none", cursor: "pointer",
+            padding: "4px", fontSize: "14px", lineHeight: 1,
+            animation: pullMutation.isPending ? "sta-spin 1s linear infinite" : "none",
+            transition: "color 0.2s",
+          }}
+          title={pullMutation.isPending ? "Pulling from Sentry…" : "Pull from Sentry now"}
         >
-          {isLoading ? "..." : metrics.queueSize}
-        </Badge>
+          ↺
+        </button>
       </div>
-
-      <div className="flex items-center gap-1.5 text-xs">
-        <CheckCircle className="size-3.5 text-emerald-500" />
-        <span className="text-muted-foreground hidden md:inline">Handled</span>
-        <Badge
-          variant="outline"
-          className="font-mono text-xs h-5 px-1.5 min-w-[2ch] justify-center"
-        >
-          {isLoading ? "..." : metrics.handledToday}
-        </Badge>
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs">
-        <TrendingUp className="size-3.5 text-amber-500" />
-        <span className="text-muted-foreground hidden md:inline">Disagree</span>
-        <Badge
-          variant={metrics.disagreementRate > 20 ? "destructive" : "outline"}
-          className="font-mono text-xs h-5 px-1.5 min-w-[3ch] justify-center"
-        >
-          {isLoading ? "..." : `${metrics.disagreementRate}%`}
-        </Badge>
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs">
-        <Clock className="size-3.5 text-muted-foreground" />
-        <span className="text-muted-foreground hidden md:inline">Last pull</span>
-        <span className="font-mono text-xs text-muted-foreground">
-          {isLoading ? "..." : formatTimestamp(metrics.lastPull)}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs">
-        <FileText className="size-3.5 text-sky-500" />
-        <span className="text-muted-foreground hidden lg:inline">Briefs</span>
-        <Badge
-          variant="outline"
-          className="font-mono text-xs h-5 px-1.5 min-w-[2ch] justify-center"
-        >
-          {isLoading ? "..." : metrics.briefsGenerated}
-        </Badge>
-      </div>
-
-      <div className="flex-1" />
-
-      {isError && (
-        <span className="text-xs text-destructive">Metrics unavailable</span>
-      )}
-
-      <button
-        onClick={() => refetch()}
-        className="p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-        title="Refresh metrics"
-      >
-        <RefreshCw className="size-3.5" />
-      </button>
     </header>
   );
 }

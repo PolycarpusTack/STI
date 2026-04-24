@@ -1,28 +1,9 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useCallback } from "react";
-import {
-  Search,
-  X,
-  ChevronDown,
-  AlertCircle,
-  Inbox,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useCockpitStore } from "@/lib/store";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { relativeTime, confidenceLevel, CONF_COLORS } from "@/lib/format";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +14,7 @@ export interface Issue {
   level: string;
   project: string;
   environment: string;
+  culprit?: string;
   release?: string;
   eventCount: number;
   firstSeen: string;
@@ -45,55 +27,25 @@ export interface Issue {
     module?: string;
     tenantImpact?: string;
     reproductionHint?: string;
+    priority?: string | null;
+    issueType?: string | null;
+    confidenceNotes?: string | null;
+    signals?: string | null;
     promptVersion?: string;
     parseError?: string | null;
+    rawResponse?: string | null;
   } | null;
   decision?: {
     decision: string;
     responder: string;
     timestamp: string;
+    jiraKey?: string | null;
   } | null;
 }
 
 interface IssuesResponse {
   issues: Issue[];
   total: number;
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const leanColors: Record<string, string> = {
-  jira: "bg-orange-500",
-  close: "bg-emerald-500",
-  investigate: "bg-amber-500",
-  watchlist: "bg-sky-500",
-};
-
-const leanBadgeStyles: Record<string, string> = {
-  jira: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
-  close: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
-  investigate: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
-  watchlist: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
-};
-
-const levelColors: Record<string, string> = {
-  error: "text-red-500",
-  warning: "text-yellow-500",
-  info: "text-sky-500",
-};
-
-function relativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString();
 }
 
 // ─── Issue Row ───────────────────────────────────────────────────────────────
@@ -109,116 +61,139 @@ function IssueRow({
   isFocused: boolean;
   onClick: () => void;
 }) {
-  const hasDisagreement =
-    issue.decision && issue.lean && issue.decision.decision !== issue.lean;
+  const lean = issue.lean ?? "";
+  const conf = confidenceLevel(issue.confidence);
+  const hasDisagreement = issue.decision && lean && issue.decision.decision !== lean;
 
   return (
     <button
       onClick={onClick}
-      className={cn(
-        "w-full text-left px-3 py-2.5 border-b transition-colors",
-        isSelected
-          ? "bg-accent"
-          : isFocused
-          ? "bg-accent/40"
-          : "hover:bg-muted/50",
-        "border-border/50"
-      )}
+      style={{
+        display: "block", width: "100%", textAlign: "left",
+        padding: "12px 14px",
+        borderBottom: "1px solid #1F2D45",
+        cursor: "pointer", background: "none", border: "none",
+        backgroundColor: isSelected ? "#2A3855" : isFocused ? "#1C2333" : "transparent",
+        boxShadow: isSelected ? "inset 3px 0 0 #2DD4BF" : "none",
+        transition: "background 0.08s",
+        position: "relative",
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected) e.currentTarget.style.backgroundColor = "#111827";
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) e.currentTarget.style.backgroundColor = isFocused ? "#1C2333" : "transparent";
+      }}
     >
-      <div className="flex items-start gap-2">
-        {/* Lean indicator */}
-        <div className="mt-1.5 shrink-0">
-          <div
-            className={cn(
-              "size-2.5 rounded-full",
-              leanColors[issue.lean ?? ""] ?? "bg-muted-foreground/30"
-            )}
-            title={issue.lean ?? "No lean"}
+      {/* Header: lean badge + id */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+        {lean && <span className={`sta-lean-badge sta-lean-${lean}`}>{lean}</span>}
+        {issue.brief?.priority && issue.brief.priority !== "Noise" && (
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.08em",
+            textTransform: "uppercase", padding: "2px 5px", borderRadius: "2px",
+            color: issue.brief.priority === "P0" ? "#F87171" : issue.brief.priority === "P1" ? "#FB923C" : issue.brief.priority === "P2" ? "#F59E0B" : "#9ca3af",
+            background: issue.brief.priority === "P0" ? "rgba(248,113,113,0.12)" : issue.brief.priority === "P1" ? "rgba(251,146,60,0.12)" : issue.brief.priority === "P2" ? "rgba(245,158,11,0.12)" : "rgba(156,163,175,0.10)",
+          }}>{issue.brief.priority}</span>
+        )}
+        {issue.brief?.priority === "Noise" && (
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.08em",
+            color: "#3D4F68", background: "rgba(61,79,104,0.15)", padding: "2px 5px", borderRadius: "2px",
+          }}>noise</span>
+        )}
+        {issue.brief?.parseError && (
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.1em",
+            textTransform: "uppercase", color: "#F87171",
+            background: "rgba(248,113,113,0.08)", padding: "2px 5px", borderRadius: "2px",
+          }}>err</span>
+        )}
+        <span style={{
+          fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+          fontSize: "10px", color: "#3D4F68", marginLeft: "auto",
+        }}>
+          {issue.sentryId}
+        </span>
+      </div>
+
+      {/* Title / headline */}
+      <div style={{
+        fontSize: "13px", color: "#F0F4FF", lineHeight: 1.4, marginBottom: "6px",
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+      }}>
+        {issue.brief?.summary ?? issue.title}
+      </div>
+
+      {/* Meta pills */}
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+        {issue.brief?.module && (
+          <span className="sta-meta-pill">
+            <span className="k">mod</span>
+            <span className="v">{issue.brief.module}</span>
+          </span>
+        )}
+        <span className="sta-meta-pill">
+          <span className="k">evt</span>
+          <span className="v">{issue.eventCount}</span>
+        </span>
+        <span className="sta-meta-pill">
+          <span className="k">age</span>
+          <span className="v">{relativeTime(issue.lastSeen)}</span>
+        </span>
+        {conf && (
+          <span
+            title={`Confidence: ${conf}`}
+            style={{
+              display: "inline-block", width: "6px", height: "6px",
+              borderRadius: "50%", backgroundColor: CONF_COLORS[conf],
+            }}
           />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {/* Title row */}
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "text-sm truncate",
-                isSelected ? "font-medium" : "font-normal"
-              )}
-            >
-              {issue.title}
-            </span>
-          </div>
-
-          {/* Meta row */}
-          <div className="flex items-center gap-2 mt-0.5">
-            {issue.brief?.module && (
-              <span className="text-[11px] text-muted-foreground truncate">
-                {issue.brief.module}
-              </span>
-            )}
-
-            {issue.brief?.module && (
-              <span className="text-border">·</span>
-            )}
-
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {issue.eventCount}evt
-            </span>
-
-            <span className="text-border">·</span>
-
-            <span
-              className={cn(
-                "text-[11px] font-mono",
-                levelColors[issue.level] ?? "text-muted-foreground"
-              )}
-            >
-              {issue.level}
-            </span>
-
-            <span className="text-border">·</span>
-
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {relativeTime(issue.lastSeen)}
-            </span>
-          </div>
-        </div>
-
-        {/* Decision badge */}
+        )}
         {issue.decision && (
-          <Badge
-            variant="outline"
-            className={cn(
-              "shrink-0 text-[10px] h-5 px-1.5 font-mono",
-              hasDisagreement
-                ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
-                : "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800"
-            )}
-          >
-            {hasDisagreement ? "✗" : "✓"}
-          </Badge>
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: hasDisagreement ? "#F87171" : "#4ADE80",
+            background: hasDisagreement ? "rgba(248,113,113,0.08)" : "rgba(74,222,128,0.08)",
+            padding: "1px 5px", borderRadius: "2px",
+          }}>
+            {hasDisagreement ? `ai:${lean}` : issue.decision.decision}
+          </span>
+        )}
+        {issue.decision?.jiraKey && (
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.05em",
+            color: "#2DD4BF", background: "rgba(45,212,191,0.08)",
+            padding: "1px 5px", borderRadius: "2px",
+          }}>
+            {issue.decision.jiraKey}
+          </span>
         )}
       </div>
     </button>
   );
 }
 
-// ─── Loading Skeleton ────────────────────────────────────────────────────────
+// ─── Loading skeleton ────────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
   return (
-    <div className="p-3 space-y-3">
+    <div style={{ padding: "8px 0" }}>
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Skeleton className="size-2.5 rounded-full" />
-            <Skeleton className="h-4 w-3/4" />
+        <div key={i} style={{ padding: "12px 14px", borderBottom: "1px solid #1F2D45" }}>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
+            <div style={{ width: "48px", height: "14px", background: "#1C2333", borderRadius: "2px" }} />
+            <div style={{ width: "64px", height: "14px", background: "#1C2333", borderRadius: "2px", marginLeft: "auto" }} />
           </div>
-          <div className="flex items-center gap-2 pl-5">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-3 w-12" />
+          <div style={{ height: "13px", background: "#1C2333", borderRadius: "2px", marginBottom: "4px", width: "90%" }} />
+          <div style={{ height: "13px", background: "#1C2333", borderRadius: "2px", marginBottom: "8px", width: "60%" }} />
+          <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ width: "40px", height: "11px", background: "#1C2333", borderRadius: "2px" }} />
+            <div style={{ width: "32px", height: "11px", background: "#1C2333", borderRadius: "2px" }} />
           </div>
         </div>
       ))}
@@ -226,7 +201,7 @@ function LoadingSkeleton() {
   );
 }
 
-// ─── Issue List Component ────────────────────────────────────────────────────
+// ─── Issue List ───────────────────────────────────────────────────────────────
 
 export function IssueList() {
   const {
@@ -242,22 +217,35 @@ export function IssueList() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const params = new URLSearchParams();
-  params.set("view", currentView);
+  // Local search state with 300ms debounce to avoid firing on every keystroke.
+  const [localSearch, setLocalSearch] = useState(filters.search ?? "");
+  useEffect(() => {
+    const t = setTimeout(() => setFilters({ search: localSearch }), 300);
+    return () => clearTimeout(t);
+  }, [localSearch, setFilters]);
+  // Keep local state in sync when filters are cleared externally.
+  useEffect(() => {
+    if (!filters.search) setLocalSearch("");
+  }, [filters.search]);
+
+  const [limit, setLimit] = useState(50);
+  // Reset limit when view or filters change.
+  useEffect(() => { setLimit(50); }, [currentView, filters.lean, filters.search, filters.level]);
+
+  const params = new URLSearchParams({ view: currentView, limit: String(limit) });
   if (filters.lean) params.set("lean", filters.lean);
   if (filters.search) params.set("search", filters.search);
   if (filters.level) params.set("level", filters.level);
 
   const { data, isLoading, isError } = useQuery<IssuesResponse, Error>({
-    queryKey: ["issues", currentView, filters.lean, filters.search, filters.level],
-    queryFn: () => fetch(`/api/issues?${params.toString()}`).then((r) => r.json()),
+    queryKey: ["issues", currentView, filters.lean, filters.search, filters.level, limit],
+    queryFn: () => fetch(`/api/issues?${params.toString()}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     staleTime: 10_000,
   });
 
   const issues = data?.issues ?? [];
   const total = data?.total ?? 0;
 
-  // Keyboard shortcut: "/" to focus search
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "/" && document.activeElement !== searchInputRef.current) {
@@ -269,15 +257,13 @@ export function IssueList() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Keyboard navigation within the list
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (document.activeElement === searchInputRef.current) return;
-
-      if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
         setFocusedIndex(Math.min(focusedIndex + 1, issues.length - 1));
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
         setFocusedIndex(Math.max(focusedIndex - 1, 0));
       } else if (e.key === "Enter" && issues[focusedIndex]) {
@@ -288,15 +274,11 @@ export function IssueList() {
     [focusedIndex, issues, setFocusedIndex, selectIssue]
   );
 
-  // Scroll focused item into view
   useEffect(() => {
-    const el = listRef.current?.querySelector(
-      `[data-index="${focusedIndex}"]`
-    ) as HTMLElement | null;
+    const el = listRef.current?.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement | null;
     el?.scrollIntoView({ block: "nearest" });
   }, [focusedIndex]);
 
-  // Invalidate issues list periodically
   useEffect(() => {
     const interval = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
@@ -304,138 +286,162 @@ export function IssueList() {
     return () => clearInterval(interval);
   }, [queryClient]);
 
+  const viewLabel = currentView === "inbox"
+    ? "Inbox"
+    : currentView === "watchlist"
+    ? "Watchlist"
+    : currentView.charAt(0).toUpperCase() + currentView.slice(1);
+
   return (
     <div
-      className="flex flex-col h-full"
+      style={{ display: "flex", flexDirection: "column", height: "100%", outline: "none" }}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
       {/* Header */}
-      <div className="px-3 py-2 border-b shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold capitalize">
-            {currentView}
-          </h2>
-          <span className="text-xs text-muted-foreground font-mono">
-            {total} issues
-          </span>
-        </div>
+      <div style={{
+        padding: "10px 14px", borderBottom: "1px solid #1F2D45",
+        background: "#111827", flexShrink: 0,
+        display: "flex", alignItems: "center", gap: "10px",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+          fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9BAAC4",
+        }}>
+          {viewLabel}
+        </span>
+        <span style={{
+          fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#3D4F68",
+        }}>
+          {total}
+        </span>
+      </div>
 
-        {/* Filters */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              ref={searchInputRef}
-              placeholder="Search... (/)"
-              value={filters.search}
-              onChange={(e) => setFilters({ search: e.target.value })}
-              className="h-7 pl-7 text-xs"
-            />
-            {filters.search && (
-              <button
-                onClick={() => setFilters({ search: "" })}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
+      {/* Search */}
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid #1F2D45", flexShrink: 0 }}>
+        <input
+          ref={searchInputRef}
+          type="text"
+          placeholder="search headlines, modules, tenants… ( / )"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          style={{
+            width: "100%", background: "#1C2333", border: "1px solid #1F2D45",
+            color: "#F0F4FF", padding: "6px 10px", borderRadius: "3px",
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+            fontSize: "11px", outline: "none",
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "#0F5E56"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "#1F2D45"; }}
+        />
+      </div>
 
-          <Select
-            value={filters.lean ?? "all"}
-            onValueChange={(val) =>
-              setFilters({ lean: val === "all" ? null : val })
-            }
+      {/* Lean filter chips */}
+      <div style={{
+        padding: "8px 14px", borderBottom: "1px solid #1F2D45",
+        flexShrink: 0, display: "flex", gap: "6px", flexWrap: "wrap",
+      }}>
+        {(["jira", "close", "investigate", "watchlist"] as const).map((lean) => (
+          <button
+            key={lean}
+            onClick={() => setFilters({ lean: filters.lean === lean ? null : lean })}
+            className={`sta-lean-badge sta-lean-${lean}`}
+            style={{
+              cursor: "pointer",
+              opacity: filters.lean && filters.lean !== lean ? 0.4 : 1,
+              border: filters.lean === lean ? undefined : undefined,
+              boxShadow: filters.lean === lean ? "0 0 0 1px currentColor" : "none",
+            }}
           >
-            <SelectTrigger className="h-7 w-[90px] text-xs">
-              <SelectValue placeholder="Lean" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="jira">Jira</SelectItem>
-              <SelectItem value="close">Close</SelectItem>
-              <SelectItem value="investigate">Investigate</SelectItem>
-              <SelectItem value="watchlist">Watchlist</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filters.level ?? "all"}
-            onValueChange={(val) =>
-              setFilters({ level: val === "all" ? null : val })
-            }
+            {lean}
+          </button>
+        ))}
+        {filters.lean && (
+          <button
+            onClick={() => setFilters({ lean: null })}
+            style={{
+              fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px",
+              letterSpacing: "0.1em", textTransform: "uppercase",
+              color: "#3D4F68", background: "none", border: "none",
+              cursor: "pointer", padding: "2px 4px",
+            }}
           >
-            <SelectTrigger className="h-7 w-[90px] text-xs">
-              <SelectValue placeholder="Level" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            ✕ clear
+          </button>
+        )}
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-hidden">
+      <div style={{ flex: 1, overflowY: "auto" }}>
         {isLoading && <LoadingSkeleton />}
 
         {isError && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-            <AlertCircle className="size-8" />
-            <span className="text-sm">Failed to load issues</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                queryClient.invalidateQueries({ queryKey: ["issues"] })
-              }
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", height: "200px", gap: "8px",
+            color: "#F87171", fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px",
+          }}>
+            <span>⚠</span>
+            <span>Failed to load issues</span>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["issues"] })}
+              className="sta-btn"
+              style={{ fontSize: "10px", padding: "4px 10px" }}
             >
               Retry
-            </Button>
+            </button>
           </div>
         )}
 
         {!isLoading && !isError && issues.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-            <Inbox className="size-8" />
-            <span className="text-sm">No issues found</span>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", height: "200px", gap: "8px",
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px",
+            letterSpacing: "0.08em", textTransform: "uppercase", color: "#3D4F68",
+          }}>
+            <span style={{ fontSize: "32px" }}>⌬</span>
+            <span>Nothing to triage</span>
             {filters.search && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  useCockpitStore.getState().resetFilters()
-                }
+              <button
+                onClick={() => { setLocalSearch(""); setFilters({ search: "" }); }}
+                className="sta-btn"
+                style={{ fontSize: "10px", padding: "4px 10px" }}
               >
-                Clear filters
-              </Button>
+                Clear search
+              </button>
             )}
           </div>
         )}
 
         {!isLoading && !isError && issues.length > 0 && (
-          <ScrollArea className="h-full">
-            <div ref={listRef} className="divide-y divide-border/50">
-              {issues.map((issue, index) => (
-                <div key={issue.id} data-index={index}>
-                  <IssueRow
-                    issue={issue}
-                    isSelected={issue.id === selectedIssueId}
-                    isFocused={index === focusedIndex}
-                    onClick={() => selectIssue(issue.id)}
-                  />
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+          <div ref={listRef}>
+            {issues.map((issue, index) => (
+              <div key={issue.id} data-index={index}>
+                <IssueRow
+                  issue={issue}
+                  isSelected={issue.id === selectedIssueId}
+                  isFocused={index === focusedIndex}
+                  onClick={() => selectIssue(issue.id)}
+                />
+              </div>
+            ))}
+            {issues.length < total && (
+              <div style={{ padding: "12px 14px", borderTop: "1px solid #1F2D45" }}>
+                <button
+                  className="sta-btn"
+                  onClick={() => setLimit((l) => l + 50)}
+                  style={{ width: "100%", justifyContent: "center", fontSize: "10px" }}
+                >
+                  Load more ({issues.length} / {total})
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-export type { Issue, IssuesResponse };
+export type { IssuesResponse };

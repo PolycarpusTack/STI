@@ -45,8 +45,13 @@ export async function GET(
         module: issue.brief.module,
         tenantImpact: issue.brief.tenantImpact,
         reproductionHint: issue.brief.reproductionHint,
+        priority: issue.brief.priority ?? null,
+        issueType: issue.brief.issueType ?? null,
+        confidenceNotes: issue.brief.confidenceNotes ?? null,
+        signals: issue.brief.signals ?? null,
         promptVersion: issue.brief.promptVersion,
         parseError: issue.brief.parseError ? 'Failed to parse LLM response' : null,
+        rawResponse: issue.brief.parseError ? (issue.brief.rawResponse || null) : null,
         tokenCount: issue.brief.tokenCount,
         latencyMs: issue.brief.latencyMs,
       } : null,
@@ -56,6 +61,7 @@ export async function GET(
         timestamp: latestDecision.createdAt.toISOString(),
         aiLean: latestDecision.aiLean,
         jiraId: latestDecision.jiraId,
+        jiraKey: latestDecision.jiraKey ?? null,
       } : null,
     }
 
