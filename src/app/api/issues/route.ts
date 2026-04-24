@@ -90,7 +90,8 @@ async function countIssues(
   view: string,
   where: Record<string, unknown>,
   lean: string | null,
-  globalFps?: string[]
+  globalFps?: string[],
+  suppressedFps?: string[]
 ): Promise<number> {
   switch (view) {
     case 'inbox': {
@@ -108,6 +109,7 @@ async function countIssues(
       return db.issue.count({
         where: {
           ...where,
+          ...(lean ? { brief: { lean } } : {}),
           decisions: {
             some: { decision: 'watchlist' },
             none: { decision: { in: ['jira', 'close', 'investigate'] } },
@@ -115,10 +117,9 @@ async function countIssues(
         },
       });
     case 'suppressed': {
-      const suppressedFingerprints = await db.suppression.findMany({
+      const fpList = suppressedFps ?? (await db.suppression.findMany({
         select: { fingerprint: true },
-      });
-      const fpList = suppressedFingerprints.map((s) => s.fingerprint);
+      })).map((s) => s.fingerprint);
       return db.issue.count({ where: { ...where, fingerprint: { in: fpList } } });
     }
     default:
@@ -161,6 +162,7 @@ export async function GET(request: NextRequest) {
 
     let issues
     let inboxGlobalFps: string[] | undefined
+    let suppressedFps: string[] | undefined
 
     switch (view) {
       case 'inbox': {
@@ -220,6 +222,7 @@ export async function GET(request: NextRequest) {
           select: { fingerprint: true },
         })
         const fpList = suppressedFingerprints.map(s => s.fingerprint)
+        suppressedFps = fpList
         issues = await db.issue.findMany({
           where: {
             ...where,
@@ -246,7 +249,7 @@ export async function GET(request: NextRequest) {
       filtered = issues.filter(i => i.brief?.lean === lean)
     }
 
-    const total = await countIssues(view, where, lean, inboxGlobalFps)
+    const total = await countIssues(view, where, lean, inboxGlobalFps, suppressedFps)
 
     return NextResponse.json({
       issues: filtered.map(formatIssue),
