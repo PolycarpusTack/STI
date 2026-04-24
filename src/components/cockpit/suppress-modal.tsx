@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -19,6 +19,13 @@ export function SuppressModal() {
     queryFn: () => fetch(`/api/issues/${suppressModalIssueId}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     enabled: !!suppressModalIssueId && suppressModalOpen,
   });
+
+  useEffect(() => {
+    if (!suppressModalOpen) {
+      setReason("");
+      setScope("global");
+    }
+  }, [suppressModalOpen]);
 
   const suppressMutation = useMutation({
     mutationFn: async () => {

@@ -77,6 +77,15 @@ export function JiraModal() {
     }
   }, [issue]);
 
+  useEffect(() => {
+    if (!jiraModalOpen) {
+      setSummary("");
+      setDescription("");
+      setPriority("medium");
+      setComponent("");
+      setJiraSubmitError(null);
+    }
+  }, [jiraModalOpen]);
 
   const submitMutation = useMutation({
     mutationFn: () =>
