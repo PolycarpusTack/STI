@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { checkAdminSecret } from "@/lib/admin-guard";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
@@ -15,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = checkAdminSecret(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
