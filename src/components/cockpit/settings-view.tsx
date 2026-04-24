@@ -63,6 +63,7 @@ function SentryProjectsManager() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sentry-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
       setNewSlug("");
       setAddError(null);
     },
@@ -77,6 +78,7 @@ function SentryProjectsManager() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sentry-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
       setRemoveError(null);
     },
     onError: (e: Error) => setRemoveError(e.message),
@@ -103,7 +105,7 @@ function SentryProjectsManager() {
             <code style={{ ...MONO, color: "#2DD4BF", flex: 1 }}>{p.slug}</code>
             <button
               className="sta-btn"
-              onClick={() => removeMutation.mutate(p.id)}
+              onClick={() => { setRemoveError(null); removeMutation.mutate(p.id); }}
               disabled={removeMutation.isPending}
               style={{ padding: "2px 8px", fontSize: "10px", color: "#F87171", borderColor: "#7A1515" }}
             >

@@ -230,7 +230,7 @@ export function IssueList() {
 
   const { data: sentryProjects = [] } = useQuery<{ id: string; slug: string }[]>({
     queryKey: ["sentry-projects"],
-    queryFn: () => fetch("/api/sentry-projects").then((r) => r.json()),
+    queryFn: () => fetch("/api/sentry-projects").then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     staleTime: 60_000,
   });
 
