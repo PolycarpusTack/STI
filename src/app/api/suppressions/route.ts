@@ -12,7 +12,6 @@ export async function GET() {
       },
     })
 
-    // Format to match frontend Suppression interface
     const formatted = suppressions.map(s => ({
       id: s.id,
       fingerprint: s.fingerprint,
@@ -34,17 +33,40 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { fingerprint, reason, scope, authorId } = body
+    const { fingerprint, reason, scope, tenantValue, authorId } = body
 
     if (!fingerprint) {
       return NextResponse.json({ error: 'fingerprint is required' }, { status: 400 })
+    }
+
+    const effectiveScope = scope ?? 'global'
+    const effectiveTenant = effectiveScope === 'tenant' ? (tenantValue ?? null) : null
+
+    // Idempotent: return existing suppression if one already exists for this fingerprint+scope.
+    const existing = await db.suppression.findFirst({
+      where: { fingerprint, scope: effectiveScope, tenantValue: effectiveTenant },
+      include: { _count: { select: { issues: true } } },
+    })
+
+    if (existing) {
+      return NextResponse.json({
+        id: existing.id,
+        fingerprint: existing.fingerprint,
+        reason: existing.reason,
+        scope: existing.scope,
+        author: existing.authorId,
+        createdAt: existing.createdAt.toISOString(),
+        lastMatched: existing.lastMatchedAt?.toISOString() ?? null,
+        matchCount: existing._count.issues,
+      })
     }
 
     const suppression = await db.suppression.create({
       data: {
         fingerprint,
         reason: reason ?? '',
-        scope: scope ?? 'global',
+        scope: effectiveScope,
+        tenantValue: effectiveTenant,
         authorId: authorId ?? 'system',
       },
     })
