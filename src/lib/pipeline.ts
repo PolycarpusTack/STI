@@ -25,18 +25,33 @@ export interface PipelineStats {
 }
 
 export async function getSentryConfig() {
-  const [token, org, project] = await Promise.all([
+  const [token, org] = await Promise.all([
     getEffectiveSetting(SETTINGS_KEYS.sentryToken, "SENTRY_TOKEN"),
     getEffectiveSetting(SETTINGS_KEYS.sentryOrg, "SENTRY_ORG"),
-    getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT"),
   ]);
-  return token && org && project ? { token, org, project } : null;
+  if (!token || !org) return null;
+
+  const dbProjects = await db.sentryProject.findMany({
+    select: { slug: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const projects =
+    dbProjects.length > 0
+      ? dbProjects.map((p) => p.slug)
+      : (
+          await Promise.all([
+            getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT"),
+          ])
+        ).filter(Boolean) as string[];
+
+  return projects.length > 0 ? { token, org, projects } : null;
 }
 
 export async function ingestIssues(opts: {
   token: string;
   org: string;
-  project: string;
+  projects: string[];
 }): Promise<{ stats: PipelineStats; newIssueIds: string[] }> {
   const stats: PipelineStats = { ingested: 0, briefed: 0, skipped: 0, suppressed: 0, errors: 0 };
 
@@ -45,67 +60,70 @@ export async function ingestIssues(opts: {
     ? new Date(meta.lastPullAt)
     : new Date(Date.now() - COLD_START_HOURS * 3_600_000);
 
-  const sentryIssues = await fetchSentryIssues(since, opts);
   const suppressions = await db.suppression.findMany({ select: { fingerprint: true } });
   const suppressedFps = new Set(suppressions.map((s) => s.fingerprint));
   const newIssueIds: string[] = [];
 
-  for (let i = 0; i < sentryIssues.length; i += EVENT_CONCURRENCY) {
-    const batch = sentryIssues.slice(i, i + EVENT_CONCURRENCY);
-    await Promise.all(
-      batch.map(async (si) => {
-        try {
-          const fingerprint = si.fingerprints[0] ?? si.id;
-          if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
+  for (const project of opts.projects) {
+    const sentryIssues = await fetchSentryIssues(since, { token: opts.token, org: opts.org, project });
 
-          const event = await fetchLatestEvent(si.id, opts.token);
-          const rawStacktrace = extractStacktrace(event);
-          const environment = extractEnvironment(si, event);
-          const release = extractRelease(event);
+    for (let i = 0; i < sentryIssues.length; i += EVENT_CONCURRENCY) {
+      const batch = sentryIssues.slice(i, i + EVENT_CONCURRENCY);
+      await Promise.all(
+        batch.map(async (si) => {
+          try {
+            const fingerprint = si.fingerprints[0] ?? si.id;
+            if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
 
-          const issue = await db.issue.upsert({
-            where: { sentryIssueId: si.id },
-            create: {
-              sentryIssueId: si.id,
-              projectId: si.project.slug,
-              fingerprint,
-              title: scrub(si.title),
-              level: si.level,
-              status: si.status,
-              environment,
-              release,
-              eventCount: parseInt(si.count, 10),
-              firstSeen: new Date(si.firstSeen),
-              lastSeen: new Date(si.lastSeen),
-              culprit: scrub(si.culprit ?? ""),
-              stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
-              tags: JSON.stringify(si.tags),
-            },
-            update: {
-              eventCount: parseInt(si.count, 10),
-              lastSeen: new Date(si.lastSeen),
-              status: si.status,
-              environment,
-              release,
-              stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
-              tags: JSON.stringify(si.tags),
-            },
-          });
+            const event = await fetchLatestEvent(si.id, opts.token);
+            const rawStacktrace = extractStacktrace(event);
+            const environment = extractEnvironment(si, event);
+            const release = extractRelease(event);
 
-          stats.ingested++;
+            const issue = await db.issue.upsert({
+              where: { sentryIssueId: si.id },
+              create: {
+                sentryIssueId: si.id,
+                projectId: si.project.slug,
+                fingerprint,
+                title: scrub(si.title),
+                level: si.level,
+                status: si.status,
+                environment,
+                release,
+                eventCount: parseInt(si.count, 10),
+                firstSeen: new Date(si.firstSeen),
+                lastSeen: new Date(si.lastSeen),
+                culprit: scrub(si.culprit ?? ""),
+                stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
+                tags: JSON.stringify(si.tags),
+              },
+              update: {
+                eventCount: parseInt(si.count, 10),
+                lastSeen: new Date(si.lastSeen),
+                status: si.status,
+                environment,
+                release,
+                stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
+                tags: JSON.stringify(si.tags),
+              },
+            });
 
-          const hasBrief = await db.brief.findUnique({
-            where: { issueId: issue.id },
-            select: { id: true },
-          });
-          if (!hasBrief) newIssueIds.push(issue.id);
-          else stats.skipped++;
-        } catch (err) {
-          console.error(`[pipeline] Issue ${si.id} failed:`, err);
-          stats.errors++;
-        }
-      })
-    );
+            stats.ingested++;
+
+            const hasBrief = await db.brief.findUnique({
+              where: { issueId: issue.id },
+              select: { id: true },
+            });
+            if (!hasBrief) newIssueIds.push(issue.id);
+            else stats.skipped++;
+          } catch (err) {
+            console.error(`[pipeline] Issue ${si.id} failed:`, err);
+            stats.errors++;
+          }
+        })
+      );
+    }
   }
 
   return { stats, newIssueIds };
