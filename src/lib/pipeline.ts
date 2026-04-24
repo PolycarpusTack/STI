@@ -136,9 +136,12 @@ export function isPipelineRunning(): boolean {
   return _pipelineRunning;
 }
 
-export async function runPipeline(): Promise<PipelineStats> {
+export async function runPipeline(opts: { background?: boolean } = {}): Promise<PipelineStats> {
   if (_pipelineRunning) throw new Error("Pipeline already running");
   _pipelineRunning = true;
+
+  const release = () => { _pipelineRunning = false; };
+
   try {
     const config = await getSentryConfig();
     if (!config) throw new Error("Sentry not configured");
@@ -146,11 +149,21 @@ export async function runPipeline(): Promise<PipelineStats> {
     const startTime = Date.now();
     const { stats, newIssueIds } = await ingestIssues(config);
     writeMeta({ lastPullAt: new Date().toISOString() });
+
+    if (opts.background) {
+      void briefIssues(newIssueIds, stats)
+        .then(() => writeMeta({ lastPullStats: { ...stats, durationMs: Date.now() - startTime } }))
+        .catch((err) => console.error("[pipeline] Background brief error:", err))
+        .finally(release);
+      return { ...stats, durationMs: Date.now() - startTime };
+    }
+
     await briefIssues(newIssueIds, stats);
     const durationMs = Date.now() - startTime;
     writeMeta({ lastPullStats: { ...stats, durationMs } });
     return { ...stats, durationMs };
-  } finally {
-    _pipelineRunning = false;
+  } catch (err) {
+    release();
+    throw err;
   }
 }
