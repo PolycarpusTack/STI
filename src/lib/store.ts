@@ -8,6 +8,8 @@ interface Filters {
   lean: string | null;
   search: string;
   level: string | null;
+  project: string | null;
+  since24h: boolean;
 }
 
 interface CockpitState {
@@ -38,6 +40,8 @@ const initialFilters: Filters = {
   lean: null,
   search: "",
   level: null,
+  project: null,
+  since24h: false,
 };
 
 export const useCockpitStore = create<CockpitState>((set) => ({
