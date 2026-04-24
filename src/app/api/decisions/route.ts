@@ -78,27 +78,21 @@ export async function POST(request: NextRequest) {
     } : {}
 
     if (decision === 'undo') {
+      if (!responderId) {
+        return NextResponse.json({ error: 'responderId is required to undo a decision' }, { status: 400 })
+      }
       const latestDecision = await db.decision.findFirst({
         where: { issueId },
         orderBy: { createdAt: 'desc' },
       })
-
       if (!latestDecision) {
         return NextResponse.json({ error: 'No decision to undo' }, { status: 404 })
       }
-
-      if (responderId && latestDecision.responderId !== responderId) {
-        return NextResponse.json(
-          { error: "Cannot undo another responder's decision" },
-          { status: 403 }
-        )
+      if (latestDecision.responderId !== responderId) {
+        return NextResponse.json({ error: "Cannot undo another responder's decision" }, { status: 403 })
       }
-
-      const deleted = await db.decision.delete({
-        where: { id: latestDecision.id },
-      })
-
-      return NextResponse.json({ decision: deleted, undone: true })
+      await db.decision.delete({ where: { id: latestDecision.id } })
+      return NextResponse.json({ ok: true })
     }
 
     // Verify the issue exists
