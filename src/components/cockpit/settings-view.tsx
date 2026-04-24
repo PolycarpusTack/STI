@@ -39,6 +39,7 @@ function SentryProjectsManager() {
   const queryClient = useQueryClient();
   const [newSlug, setNewSlug] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const { data: projects = [] } = useQuery<SentryProject[]>({
     queryKey: ["sentry-projects"],
@@ -74,7 +75,11 @@ function SentryProjectsManager() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sentry-projects"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sentry-projects"] });
+      setRemoveError(null);
+    },
+    onError: (e: Error) => setRemoveError(e.message),
   });
 
   return (
@@ -107,6 +112,9 @@ function SentryProjectsManager() {
           </div>
         ))}
       </div>
+      {removeError && (
+        <div style={{ ...MONO_SMALL, color: "#F87171", marginBottom: "5px" }}>{removeError}</div>
+      )}
       <div style={{ display: "flex", gap: "8px" }}>
         <input
           className="sta-input"
