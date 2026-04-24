@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { readMeta } from '@/lib/meta'
+import { getEffectiveSetting, SETTINGS_KEYS } from '@/lib/settings'
 
 export async function GET() {
   try {
@@ -27,40 +29,38 @@ export async function GET() {
     // Total briefs
     const briefsGenerated = await db.brief.count()
 
-    // Disagreement rate: decisions where decision != aiLean
+    // Disagreement rate: actionable decisions (non-watchlist) where human overrode the AI lean.
+    // Single query — pre-filter watchlist and null aiLean in DB, compare columns in memory.
     let disagreementRate = 0
-    if (totalDecisions > 0) {
-      const disagreements = await db.decision.count({
-        where: {
-          aiLean: { not: null },
-          decision: { not: 'watchlist' },
-        },
-      })
-      // Fetch all decisions with aiLean to check for disagreement
-      const allWithAiLean = await db.decision.findMany({
-        where: { aiLean: { not: null } },
-        select: { decision: true, aiLean: true },
-      })
-      const disagreeCount = allWithAiLean.filter(d => d.decision !== d.aiLean).length
-      const relevantCount = allWithAiLean.length
-      disagreementRate = relevantCount > 0 ? Math.round((disagreeCount / relevantCount) * 10000) / 100 : 0
+    const actionable = await db.decision.findMany({
+      where: { aiLean: { not: null }, decision: { not: 'watchlist' } },
+      select: { decision: true, aiLean: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    })
+    if (actionable.length > 0) {
+      const disagreeCount = actionable.filter(d => d.decision !== d.aiLean).length
+      disagreementRate = Math.round((disagreeCount / actionable.length) * 10000) / 100
     }
 
-    // Most recent issue createdAt
-    const latestIssue = await db.issue.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    })
+    const { lastPullAt } = readMeta()
 
-    const lastPullAt = latestIssue?.createdAt ?? null
+    const [sentryToken, sentryOrg, sentryProject, llmModel] = await Promise.all([
+      getEffectiveSetting(SETTINGS_KEYS.sentryToken, "SENTRY_TOKEN"),
+      getEffectiveSetting(SETTINGS_KEYS.sentryOrg, "SENTRY_ORG"),
+      getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT"),
+      getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
+    ])
 
     return NextResponse.json({
       queueSize,
       handledToday,
       disagreementRate,
-      lastPull: lastPullAt?.toISOString() ?? null,
+      lastPull: lastPullAt ?? null,
       briefsGenerated,
       totalDecisions,
+      llmModel: llmModel ?? null,
+      sentryConfigured: !!(sentryToken && sentryOrg && sentryProject),
     })
   } catch (error) {
     console.error('Metrics fetch error:', error)
