@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { isValidLean } from '@/lib/constants'
 
 function formatIssue(issue: {
   id: string
@@ -42,6 +43,7 @@ function formatIssue(issue: {
     aiLean: string | null
     responderId: string
     jiraId: string | null
+    jiraKey?: string | null
     suppressed: boolean
     createdAt: Date
   }[]
@@ -68,6 +70,10 @@ function formatIssue(issue: {
       module: issue.brief.module,
       tenantImpact: issue.brief.tenantImpact,
       reproductionHint: issue.brief.reproductionHint,
+      priority: issue.brief.priority ?? null,
+      issueType: issue.brief.issueType ?? null,
+      confidenceNotes: issue.brief.confidenceNotes ?? null,
+      signals: issue.brief.signals ?? null,
       promptVersion: issue.brief.promptVersion,
       parseError: issue.brief.parseError ? 'Failed to parse LLM response' : null,
     } : null,
@@ -75,7 +81,48 @@ function formatIssue(issue: {
       decision: latestDecision.decision,
       responder: latestDecision.responderId,
       timestamp: latestDecision.createdAt.toISOString(),
+      jiraKey: latestDecision.jiraKey ?? null,
     } : null,
+  }
+}
+
+async function countIssues(
+  view: string,
+  where: Record<string, unknown>,
+  lean: string | null,
+  globalFps?: string[]
+): Promise<number> {
+  switch (view) {
+    case 'inbox': {
+      const briefFilter = lean ? { lean } : { isNot: null };
+      return db.issue.count({
+        where: {
+          ...where,
+          brief: briefFilter,
+          decisions: { none: {} },
+          fingerprint: { notIn: globalFps ?? [] },
+        },
+      });
+    }
+    case 'watchlist':
+      return db.issue.count({
+        where: {
+          ...where,
+          decisions: {
+            some: { decision: 'watchlist' },
+            none: { decision: { in: ['jira', 'close', 'investigate'] } },
+          },
+        },
+      });
+    case 'suppressed': {
+      const suppressedFingerprints = await db.suppression.findMany({
+        select: { fingerprint: true },
+      });
+      const fpList = suppressedFingerprints.map((s) => s.fingerprint);
+      return db.issue.count({ where: { ...where, fingerprint: { in: fpList } } });
+    }
+    default:
+      return 0;
   }
 }
 
@@ -83,7 +130,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const view = (searchParams.get('view') as string) || 'inbox'
-    const lean = searchParams.get('lean')
+    const leanParam = searchParams.get('lean')
+    if (leanParam !== null && !isValidLean(leanParam)) {
+      return NextResponse.json(
+        { error: `Invalid lean value '${leanParam}'. Must be one of: jira, close, investigate, watchlist` },
+        { status: 400 }
+      )
+    }
+    const lean = leanParam
     const search = searchParams.get('search')
     const level = searchParams.get('level')
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 200)
@@ -106,15 +160,23 @@ export async function GET(request: NextRequest) {
     }
 
     let issues
+    let inboxGlobalFps: string[] | undefined
 
     switch (view) {
       case 'inbox': {
-        const briefFilter = lean ? { lean } : { NOT: { id: { equals: undefined } } }
-        issues = await db.issue.findMany({
+        const allSuppressions = await db.suppression.findMany({
+          select: { fingerprint: true, scope: true, tenantValue: true },
+        }) as { fingerprint: string; scope: string; tenantValue: string | null }[]
+        const globalFps = allSuppressions.filter(s => s.scope === 'global').map(s => s.fingerprint)
+        inboxGlobalFps = globalFps
+        const tenantSuppressions = allSuppressions.filter(s => s.scope === 'tenant')
+        const briefFilter = lean ? { lean } : { isNot: null }
+        const fetched = await db.issue.findMany({
           where: {
             ...where,
             brief: briefFilter,
             decisions: { none: {} },
+            fingerprint: { notIn: globalFps },
           },
           include: {
             brief: true,
@@ -124,6 +186,12 @@ export async function GET(request: NextRequest) {
           take: limit,
           skip: offset,
         })
+        if (tenantSuppressions.length > 0) {
+          const tenantSet = new Set(tenantSuppressions.map(s => `${s.fingerprint}::${s.tenantValue}`))
+          issues = fetched.filter(i => !tenantSet.has(`${i.fingerprint}::${i.projectId}`))
+        } else {
+          issues = fetched
+        }
         break
       }
 
@@ -131,7 +199,10 @@ export async function GET(request: NextRequest) {
         issues = await db.issue.findMany({
           where: {
             ...where,
-            decisions: { some: { decision: 'watchlist' } },
+            decisions: {
+              some: { decision: 'watchlist' },
+              none: { decision: { in: ['jira', 'close', 'investigate'] } },
+            },
           },
           include: {
             brief: true,
@@ -165,23 +236,6 @@ export async function GET(request: NextRequest) {
         break
       }
 
-      case 'decided': {
-        issues = await db.issue.findMany({
-          where: {
-            ...where,
-            decisions: { some: { decision: { not: 'watchlist' } } },
-          },
-          include: {
-            brief: true,
-            decisions: { orderBy: { createdAt: 'desc' }, take: 1 },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-        })
-        break
-      }
-
       default:
         return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
     }
@@ -192,7 +246,7 @@ export async function GET(request: NextRequest) {
       filtered = issues.filter(i => i.brief?.lean === lean)
     }
 
-    const total = await db.issue.count({ where })
+    const total = await countIssues(view, where, lean, inboxGlobalFps)
 
     return NextResponse.json({
       issues: filtered.map(formatIssue),
