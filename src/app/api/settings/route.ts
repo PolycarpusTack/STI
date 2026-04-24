@@ -83,11 +83,15 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const secret = process.env.ADMIN_SECRET?.trim();
-  if (secret) {
-    const provided = req.headers.get("x-admin-secret");
-    if (provided !== secret) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (!secret) {
+    return NextResponse.json(
+      { error: "DELETE disabled — set ADMIN_SECRET to enable" },
+      { status: 403 }
+    );
+  }
+  const provided = req.headers.get("x-admin-secret");
+  if (provided !== secret) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   await db.setting.deleteMany({
     where: { key: { in: Object.values(SETTINGS_KEYS) } },
