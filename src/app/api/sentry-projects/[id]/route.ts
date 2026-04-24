@@ -6,10 +6,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const project = await db.sentryProject.findUnique({ where: { id } });
-  if (!project) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    const project = await db.sentryProject.findUnique({ where: { id } });
+    if (!project) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    await db.sentryProject.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("SentryProject delete error:", error);
+    return NextResponse.json({ error: "Failed to delete project", details: String(error) }, { status: 500 });
   }
-  await db.sentryProject.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
 }
