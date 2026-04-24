@@ -65,13 +65,13 @@ export function Sidebar() {
 
   const status = pipelineStatus(metrics, metricsError);
 
-  const seedMutation = useMutation({
-    mutationFn: () => fetch("/api/seed", { method: "POST" }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+  const pipelineMutation = useMutation({
+    mutationFn: () => fetch("/api/pipeline/run", { method: "POST" }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     onSuccess: () => {
-      toast.success("Seed data generated");
-      queryClient.invalidateQueries();
+      toast.success("Pipeline started");
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
     },
-    onError: () => toast.error("Failed to seed data"),
+    onError: () => toast.error("Failed to run pipeline"),
   });
 
   return (
@@ -189,15 +189,15 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Dev: Seed data */}
+      {/* Run pipeline */}
       <div style={{ borderTop: "1px solid #1F2D45", padding: "8px 14px" }}>
         <button
           className="sta-btn"
-          onClick={() => seedMutation.mutate()}
-          disabled={seedMutation.isPending}
+          onClick={() => pipelineMutation.mutate()}
+          disabled={pipelineMutation.isPending}
           style={{ width: "100%", justifyContent: "center" }}
         >
-          {seedMutation.isPending ? "Seeding…" : "Seed Data"}
+          {pipelineMutation.isPending ? "Running…" : "Run Pipeline"}
         </button>
       </div>
     </aside>

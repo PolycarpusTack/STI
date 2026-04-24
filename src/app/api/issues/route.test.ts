@@ -172,13 +172,16 @@ describe("GET /api/issues — tenant-scoped suppression", () => {
     mockSuppressionFindMany.mockResolvedValueOnce([
       { fingerprint: "fp-abc", scope: "tenant", tenantValue: "project-A" },
     ]);
-    mockIssueFindMany.mockResolvedValueOnce([
-      MINIMAL_ISSUE({ fingerprint: "fp-abc", projectId: "project-A" }),
-    ]);
+    // DB handles the exclusion; mock returns empty as it would in production
+    mockIssueFindMany.mockResolvedValueOnce([]);
 
     const res = await GET(makeRequest({ view: "inbox" }));
     const body = await res.json();
     expect(body.issues).toHaveLength(0);
+
+    // Verify the NOT exclusion is passed to the DB query
+    const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(callArg.where.NOT).toBeDefined();
   });
 
   test("tenant suppression does not add fingerprint to global notIn list", async () => {

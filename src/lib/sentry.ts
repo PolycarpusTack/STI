@@ -115,6 +115,39 @@ const VALIDATION_ERRORS: Record<number, string> = {
   404: "Project not found — check org and project slug.",
 };
 
+export interface SentryOrgProject {
+  slug: string;
+  name: string;
+}
+
+export async function fetchSentryOrgProjects(
+  token: string,
+  org: string
+): Promise<SentryOrgProject[]> {
+  const results: SentryOrgProject[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const params = new URLSearchParams({ per_page: "100" });
+    if (cursor) params.set("cursor", cursor);
+
+    const resp = await sentryFetch(`/organizations/${org}/projects/?${params}`, token);
+    if (!resp.ok) {
+      throw new Error(`Sentry projects API ${resp.status}: ${await resp.text()}`);
+    }
+
+    const page = await resp.json() as Array<{ slug: string; name: string }>;
+    results.push(...page.map((p) => ({ slug: p.slug, name: p.name })));
+
+    // Parse Link header for next cursor
+    const link = resp.headers.get("Link") ?? "";
+    const next = link.match(/<[^>]+>;\s*rel="next"[^,]*results="true"[^,]*cursor="([^"]+)"/);
+    cursor = next ? next[1] : null;
+  } while (cursor);
+
+  return results;
+}
+
 export async function validateSentryToken(opts: {
   token: string;
   org: string;

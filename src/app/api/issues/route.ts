@@ -198,12 +198,22 @@ export async function GET(request: NextRequest) {
         const tenantSuppressions = allSuppressions.filter(s => s.scope === 'tenant')
         inboxTenantSuppressions = tenantSuppressions
         const briefFilter = lean ? { lean } : { isNot: null }
-        const fetched = await db.issue.findMany({
+        const tenantExclusion = tenantSuppressions.length > 0
+          ? {
+              NOT: {
+                OR: tenantSuppressions.map(s => ({
+                  AND: [{ fingerprint: s.fingerprint }, { projectId: s.tenantValue ?? undefined }],
+                })),
+              },
+            }
+          : {}
+        issues = await db.issue.findMany({
           where: {
             ...where,
             brief: briefFilter,
             decisions: { none: {} },
             fingerprint: { notIn: globalFps },
+            ...tenantExclusion,
           },
           include: {
             brief: true,
@@ -213,12 +223,6 @@ export async function GET(request: NextRequest) {
           take: limit,
           skip: offset,
         })
-        if (tenantSuppressions.length > 0) {
-          const tenantSet = new Set(tenantSuppressions.map(s => `${s.fingerprint}::${s.tenantValue}`))
-          issues = fetched.filter(i => !tenantSet.has(`${i.fingerprint}::${i.projectId}`))
-        } else {
-          issues = fetched
-        }
         break
       }
 
@@ -270,16 +274,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
     }
 
-    // Apply lean filter in memory for views other than inbox and suppressed
-    let filtered = issues
-    if (lean && view !== 'inbox' && view !== 'suppressed') {
-      filtered = issues.filter(i => i.brief?.lean === lean)
-    }
-
     const total = await countIssues(view, where, lean, inboxGlobalFps, suppressedFps, inboxTenantSuppressions)
 
     return NextResponse.json({
-      issues: filtered.map(formatIssue),
+      issues: issues.map(formatIssue),
       total,
       limit,
       offset,

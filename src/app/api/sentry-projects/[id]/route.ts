@@ -1,13 +1,10 @@
 import { db } from "@/lib/db";
-import { checkAdminSecret } from "@/lib/admin-guard";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = checkAdminSecret(req);
-  if (denied) return denied;
   const { id } = await params;
   try {
     const project = await db.sentryProject.findUnique({ where: { id } });

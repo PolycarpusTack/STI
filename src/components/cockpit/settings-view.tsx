@@ -40,6 +40,7 @@ function SentryProjectsManager() {
   const [newSlug, setNewSlug] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [discoverResult, setDiscoverResult] = useState<string | null>(null);
 
   const { data: projects = [] } = useQuery<SentryProject[]>({
     queryKey: ["sentry-projects"],
@@ -84,6 +85,20 @@ function SentryProjectsManager() {
     onError: (e: Error) => setRemoveError(e.message),
   });
 
+  const discoverMutation = useMutation({
+    mutationFn: () =>
+      fetch("/api/sentry-projects/discover", { method: "POST" }).then((r) => {
+        if (!r.ok) return r.json().then((b) => { throw new Error(b.error ?? `HTTP ${r.status}`); });
+        return r.json();
+      }),
+    onSuccess: (data: { added: number; total: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["sentry-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      setDiscoverResult(`Added ${data.added} of ${data.total} projects`);
+    },
+    onError: (e: Error) => setDiscoverResult(`Error: ${e.message}`),
+  });
+
   return (
     <div>
       <label className="sta-label">Projects</label>
@@ -117,6 +132,21 @@ function SentryProjectsManager() {
       {removeError && (
         <div style={{ ...MONO_SMALL, color: "#F87171", marginBottom: "5px" }}>{removeError}</div>
       )}
+      <div style={{ marginBottom: "8px" }}>
+        <button
+          className="sta-btn"
+          onClick={() => { setDiscoverResult(null); discoverMutation.mutate(); }}
+          disabled={discoverMutation.isPending}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
+          {discoverMutation.isPending ? <><Loader2 size={12} className="animate-spin" /> Detecting…</> : "Auto-detect from Sentry"}
+        </button>
+        {discoverResult && (
+          <div style={{ ...MONO_SMALL, marginTop: "5px", color: discoverResult.startsWith("Error") ? "#F87171" : "#2DD4BF" }}>
+            {discoverResult}
+          </div>
+        )}
+      </div>
       <div style={{ display: "flex", gap: "8px" }}>
         <input
           className="sta-input"
