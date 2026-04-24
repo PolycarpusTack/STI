@@ -103,3 +103,10 @@ model Suppression {
 
   @@index([fingerprint])
 }
+
+model SentryProject {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  label     String   @default("")
+  createdAt DateTime @default(now())
+}
