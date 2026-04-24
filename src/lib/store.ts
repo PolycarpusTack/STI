@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type ViewType = "inbox" | "watchlist" | "decisions" | "suppressed";
+export type ViewType = "inbox" | "watchlist" | "decisions" | "suppressed" | "settings" | "help";
 
 interface Filters {
   lean: string | null;
@@ -18,7 +18,6 @@ interface CockpitState {
   jiraModalIssueId: string | null;
   suppressModalOpen: boolean;
   suppressModalIssueId: string | null;
-  sidebarExpanded: boolean;
   focusedIndex: number;
   keyboardHintsOpen: boolean;
 
@@ -31,7 +30,6 @@ interface CockpitState {
   closeJiraModal: () => void;
   openSuppressModal: (issueId: string) => void;
   closeSuppressModal: () => void;
-  toggleSidebar: () => void;
   setFocusedIndex: (index: number) => void;
   setKeyboardHintsOpen: (open: boolean) => void;
 }
@@ -50,7 +48,6 @@ export const useCockpitStore = create<CockpitState>((set) => ({
   jiraModalIssueId: null,
   suppressModalOpen: false,
   suppressModalIssueId: null,
-  sidebarExpanded: true,
   focusedIndex: 0,
   keyboardHintsOpen: false,
 
@@ -60,6 +57,10 @@ export const useCockpitStore = create<CockpitState>((set) => ({
       selectedIssueId: null,
       focusedIndex: 0,
       filters: { ...initialFilters },
+      jiraModalOpen: false,
+      suppressModalOpen: false,
+      jiraModalIssueId: null,
+      suppressModalIssueId: null,
     }),
 
   selectIssue: (id) =>
@@ -85,9 +86,6 @@ export const useCockpitStore = create<CockpitState>((set) => ({
 
   closeSuppressModal: () =>
     set({ suppressModalOpen: false, suppressModalIssueId: null }),
-
-  toggleSidebar: () =>
-    set((state) => ({ sidebarExpanded: !state.sidebarExpanded })),
 
   setFocusedIndex: (index) => set({ focusedIndex: index }),
 
