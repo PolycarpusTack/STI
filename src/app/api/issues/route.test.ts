@@ -217,6 +217,12 @@ describe("GET /api/issues — project filter", () => {
     const callArg = mockIssueFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
     expect(callArg.where.projectId).toBeUndefined();
   });
+
+  test("passes projectId filter to count query", async () => {
+    await GET(makeRequest({ view: "inbox", project: "my-proj" }));
+    const countArg = mockIssueCount.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(countArg.where.projectId).toBe("my-proj");
+  });
 });
 
 // ── since=24h filter ───────────────────────────────────────────────────────────
