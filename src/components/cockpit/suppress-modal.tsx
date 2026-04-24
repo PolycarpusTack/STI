@@ -29,7 +29,7 @@ export function SuppressModal() {
 
   const suppressMutation = useMutation({
     mutationFn: async () => {
-      await fetch("/api/suppressions", {
+      const r1 = await fetch("/api/suppressions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -39,7 +39,9 @@ export function SuppressModal() {
           tenantValue: scope === "tenant" ? (issue?.project ?? null) : null,
         }),
       });
-      await fetch("/api/decisions", {
+      if (!r1.ok) throw new Error(`Suppression failed: HTTP ${r1.status}`);
+
+      const r2 = await fetch("/api/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,6 +50,7 @@ export function SuppressModal() {
           metadata: { suppressReason: reason, suppressScope: scope },
         }),
       });
+      if (!r2.ok) throw new Error(`Decision failed: HTTP ${r2.status}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["issue", suppressModalIssueId] });
