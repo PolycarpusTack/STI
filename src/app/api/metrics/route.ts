@@ -51,11 +51,12 @@ export async function GET() {
 
     const { lastPullAt } = readMeta()
 
-    const [sentryToken, sentryOrg, sentryProject, llmModel] = await Promise.all([
+    const [sentryToken, sentryOrg, sentryProjectLegacy, llmModel, sentryProjectCount] = await Promise.all([
       getEffectiveSetting(SETTINGS_KEYS.sentryToken, "SENTRY_TOKEN"),
       getEffectiveSetting(SETTINGS_KEYS.sentryOrg, "SENTRY_ORG"),
       getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT"),
       getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
+      db.sentryProject.count(),
     ])
 
     return NextResponse.json({
@@ -66,7 +67,7 @@ export async function GET() {
       briefsGenerated,
       totalDecisions,
       llmModel: llmModel ?? null,
-      sentryConfigured: !!(sentryToken && sentryOrg && sentryProject),
+      sentryConfigured: !!(sentryToken && sentryOrg && (sentryProjectCount > 0 || sentryProjectLegacy)),
     })
   } catch (error) {
     console.error('Metrics fetch error:', error)

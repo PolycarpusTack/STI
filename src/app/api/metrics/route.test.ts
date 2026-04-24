@@ -4,12 +4,14 @@ const mockIssueCount = mock(() => Promise.resolve(0));
 const mockDecisionCount = mock(() => Promise.resolve(0));
 const mockDecisionFindMany = mock(() => Promise.resolve([]));
 const mockBriefCount = mock(() => Promise.resolve(0));
+const mockSentryProjectCount = mock(() => Promise.resolve(0));
 
 mock.module("@/lib/db", () => ({
   db: {
     issue: { count: mockIssueCount },
     decision: { count: mockDecisionCount, findMany: mockDecisionFindMany },
     brief: { count: mockBriefCount },
+    sentryProject: { count: mockSentryProjectCount },
   },
 }));
 
@@ -43,6 +45,8 @@ describe("GET /api/metrics — llmModel field (TASK-4.2)", () => {
     mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null });
     mockGetEffectiveSetting.mockReset();
     mockGetEffectiveSetting.mockResolvedValue(null);
+    mockSentryProjectCount.mockReset();
+    mockSentryProjectCount.mockResolvedValue(0);
   });
 
   test("includes llmModel in response", async () => {
@@ -77,6 +81,8 @@ describe("GET /api/metrics — disagreement rate", () => {
     mockBriefCount.mockResolvedValue(0);
     mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null });
     mockGetEffectiveSetting.mockResolvedValue(null);
+    mockSentryProjectCount.mockReset();
+    mockSentryProjectCount.mockResolvedValue(0);
   });
 
   test("rate is 0 when there are no decisions", async () => {
@@ -147,6 +153,8 @@ describe("GET /api/metrics — sentryConfigured field (TASK-4.1)", () => {
     mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null });
     mockGetEffectiveSetting.mockReset();
     mockGetEffectiveSetting.mockResolvedValue(null);
+    mockSentryProjectCount.mockReset();
+    mockSentryProjectCount.mockResolvedValue(0);
   });
 
   test("includes sentryConfigured in response", async () => {
@@ -155,7 +163,7 @@ describe("GET /api/metrics — sentryConfigured field (TASK-4.1)", () => {
     expect("sentryConfigured" in body).toBe(true);
   });
 
-  test("sentryConfigured is true when token, org and project are all set", async () => {
+  test("sentryConfigured is true when token, org and legacy project setting are set", async () => {
     mockGetEffectiveSetting.mockImplementation((key: string) => {
       if (["sentry.token", "sentry.org", "sentry.project"].includes(key))
         return Promise.resolve("value");
@@ -167,11 +175,34 @@ describe("GET /api/metrics — sentryConfigured field (TASK-4.1)", () => {
     expect(body.sentryConfigured).toBe(true);
   });
 
-  test("sentryConfigured is false when any sentry setting is missing", async () => {
+  test("sentryConfigured is true when token, org are set and SentryProject table has rows", async () => {
+    mockGetEffectiveSetting.mockImplementation((key: string) => {
+      if (["sentry.token", "sentry.org"].includes(key)) return Promise.resolve("value");
+      return Promise.resolve(null);
+    });
+    mockSentryProjectCount.mockResolvedValue(2);
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.sentryConfigured).toBe(true);
+  });
+
+  test("sentryConfigured is false when token is missing", async () => {
+    mockGetEffectiveSetting.mockResolvedValue(null);
+    mockSentryProjectCount.mockResolvedValue(3);
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.sentryConfigured).toBe(false);
+  });
+
+  test("sentryConfigured is false when no projects configured anywhere", async () => {
     mockGetEffectiveSetting.mockImplementation((key: string) => {
       if (key === "sentry.token") return Promise.resolve("tok");
-      return Promise.resolve(null); // org and project missing
+      if (key === "sentry.org") return Promise.resolve("my-org");
+      return Promise.resolve(null);
     });
+    mockSentryProjectCount.mockResolvedValue(0);
 
     const res = await GET();
     const body = await res.json();
