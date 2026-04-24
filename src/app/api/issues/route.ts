@@ -91,17 +91,28 @@ async function countIssues(
   where: Record<string, unknown>,
   lean: string | null,
   globalFps?: string[],
-  suppressedFps?: string[]
+  suppressedFps?: string[],
+  tenantSuppressions?: { fingerprint: string; tenantValue: string | null }[]
 ): Promise<number> {
   switch (view) {
     case 'inbox': {
       const briefFilter = lean ? { lean } : { isNot: null };
+      const tenantExclusion = (tenantSuppressions && tenantSuppressions.length > 0)
+        ? {
+            NOT: {
+              OR: tenantSuppressions.map(s => ({
+                AND: [{ fingerprint: s.fingerprint }, { projectId: s.tenantValue ?? undefined }],
+              })),
+            },
+          }
+        : {};
       return db.issue.count({
         where: {
           ...where,
           brief: briefFilter,
           decisions: { none: {} },
           fingerprint: { notIn: globalFps ?? [] },
+          ...tenantExclusion,
         },
       });
     }
@@ -120,7 +131,13 @@ async function countIssues(
       const fpList = suppressedFps ?? (await db.suppression.findMany({
         select: { fingerprint: true },
       })).map((s) => s.fingerprint);
-      return db.issue.count({ where: { ...where, fingerprint: { in: fpList } } });
+      return db.issue.count({
+        where: {
+          ...where,
+          fingerprint: { in: fpList },
+          ...(lean ? { brief: { lean } } : {}),
+        },
+      });
     }
     default:
       return 0;
@@ -168,6 +185,7 @@ export async function GET(request: NextRequest) {
 
     let issues
     let inboxGlobalFps: string[] | undefined
+    let inboxTenantSuppressions: { fingerprint: string; tenantValue: string | null }[] | undefined
     let suppressedFps: string[] | undefined
 
     switch (view) {
@@ -178,6 +196,7 @@ export async function GET(request: NextRequest) {
         const globalFps = allSuppressions.filter(s => s.scope === 'global').map(s => s.fingerprint)
         inboxGlobalFps = globalFps
         const tenantSuppressions = allSuppressions.filter(s => s.scope === 'tenant')
+        inboxTenantSuppressions = tenantSuppressions
         const briefFilter = lean ? { lean } : { isNot: null }
         const fetched = await db.issue.findMany({
           where: {
@@ -234,6 +253,7 @@ export async function GET(request: NextRequest) {
           where: {
             ...where,
             fingerprint: { in: fpList },
+            ...(lean ? { brief: { lean } } : {}),
           },
           include: {
             brief: true,
@@ -250,13 +270,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
     }
 
-    // Apply lean filter in memory for views other than inbox
+    // Apply lean filter in memory for views other than inbox and suppressed
     let filtered = issues
-    if (lean && view !== 'inbox') {
+    if (lean && view !== 'inbox' && view !== 'suppressed') {
       filtered = issues.filter(i => i.brief?.lean === lean)
     }
 
-    const total = await countIssues(view, where, lean, inboxGlobalFps, suppressedFps)
+    const total = await countIssues(view, where, lean, inboxGlobalFps, suppressedFps, inboxTenantSuppressions)
 
     return NextResponse.json({
       issues: filtered.map(formatIssue),

@@ -33,7 +33,25 @@ export async function GET(request: NextRequest) {
       ? decisions.filter(d => d.aiLean && d.decision !== d.aiLean)
       : decisions
 
-    const total = disagreementsOnly ? filtered.length : await db.decision.count({ where })
+    let total: number
+    if (disagreementsOnly) {
+      // Can't express column-to-column comparison in Prisma; use raw SQL
+      if (responderId) {
+        const result = await db.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*) as count FROM "Decision"
+          WHERE "aiLean" IS NOT NULL AND "aiLean" != "decision" AND "responderId" = ${responderId}
+        `
+        total = Number(result[0].count)
+      } else {
+        const result = await db.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*) as count FROM "Decision"
+          WHERE "aiLean" IS NOT NULL AND "aiLean" != "decision"
+        `
+        total = Number(result[0].count)
+      }
+    } else {
+      total = await db.decision.count({ where })
+    }
 
     return NextResponse.json({
       decisions: filtered.map((d) => ({
