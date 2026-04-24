@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -77,14 +77,16 @@ export function JiraModal() {
     }
   }, [issue]);
 
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!jiraModalOpen) {
+    if (wasOpen.current && !jiraModalOpen) {
       setSummary("");
       setDescription("");
       setPriority("medium");
       setComponent("");
       setJiraSubmitError(null);
     }
+    wasOpen.current = jiraModalOpen;
   }, [jiraModalOpen]);
 
   const submitMutation = useMutation({
