@@ -185,5 +185,8 @@ describe("ingestIssues — fingerprint fallback", () => {
 
     expect(stats.ingested).toBe(2);
     expect(mockIssueUpsert).toHaveBeenCalledTimes(2);
+    const calls = mockIssueUpsert.mock.calls;
+    expect((calls[0][0] as { create: { sentryIssueId: string } }).create.sentryIssueId).toBe("S-1");
+    expect((calls[1][0] as { create: { sentryIssueId: string } }).create.sentryIssueId).toBe("S-2");
   });
 });

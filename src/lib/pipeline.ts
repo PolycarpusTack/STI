@@ -39,11 +39,8 @@ export async function getSentryConfig() {
   const projects =
     dbProjects.length > 0
       ? dbProjects.map((p) => p.slug)
-      : (
-          await Promise.all([
-            getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT"),
-          ])
-        ).filter(Boolean) as string[];
+      : [await getEffectiveSetting(SETTINGS_KEYS.sentryProject, "SENTRY_PROJECT")]
+          .filter(Boolean) as string[];
 
   return projects.length > 0 ? { token, org, projects } : null;
 }

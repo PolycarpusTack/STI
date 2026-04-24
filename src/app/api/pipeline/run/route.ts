@@ -16,7 +16,7 @@ export async function POST() {
   const config = await getSentryConfig();
   if (!config) {
     return NextResponse.json(
-      { error: "Sentry not configured. Set SENTRY_TOKEN, SENTRY_ORG, SENTRY_PROJECT in .env." },
+      { error: "Sentry not configured. Set SENTRY_TOKEN and SENTRY_ORG (via .env or Settings), then add at least one project in Settings." },
       { status: 503 }
     );
   }
