@@ -161,6 +161,7 @@ export async function runPipeline(opts: { background?: boolean } = {}): Promise<
     await briefIssues(newIssueIds, stats);
     const durationMs = Date.now() - startTime;
     writeMeta({ lastPullStats: { ...stats, durationMs } });
+    release();
     return { ...stats, durationMs };
   } catch (err) {
     release();
