@@ -103,9 +103,9 @@ describe("POST /api/decisions — Jira metadata persistence", () => {
     expect(callArg.data.jiraComponent).toBe("auth");
   });
 
-  test("persists suppressReason and suppressScope when decision is 'suppress'", async () => {
+  test("persists suppressReason and suppressScope alongside a close decision (suppress modal flow)", async () => {
     mockDecisionCreate.mockResolvedValue({
-      id: "d1", issueId: "i1", decision: "suppress", aiLean: null,
+      id: "d1", issueId: "i1", decision: "close", aiLean: null,
       responderId: "r1", jiraKey: null, jiraSummary: null,
       jiraDescription: null, jiraPriority: null, jiraComponent: null,
       jiraError: null, suppressReason: "Bot traffic", suppressScope: "global",
@@ -113,7 +113,7 @@ describe("POST /api/decisions — Jira metadata persistence", () => {
     });
     await POST(makePostRequest({
       issueId: "i1",
-      decision: "suppress",
+      decision: "close",
       metadata: { suppressReason: "Bot traffic", suppressScope: "global" },
     }));
 
