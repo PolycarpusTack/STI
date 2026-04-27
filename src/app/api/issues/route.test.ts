@@ -259,6 +259,17 @@ describe("GET /api/issues — stats field in response", () => {
     const body = await res.json();
     expect(body.issues[0].stats).toBeNull();
   });
+
+  test("returns null stats when statsJson is invalid JSON", async () => {
+    mockSuppressionFindMany.mockResolvedValueOnce([]);
+    mockIssueFindMany.mockResolvedValueOnce([
+      MINIMAL_ISSUE({ statsJson: "not-valid-json" }),
+    ]);
+    const res = await GET(makeRequest({ view: "inbox" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.issues[0].stats).toBeNull();
+  });
 });
 
 // ── since=24h filter ───────────────────────────────────────────────────────────
