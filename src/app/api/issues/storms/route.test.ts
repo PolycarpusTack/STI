@@ -47,16 +47,45 @@ describe("GET /api/issues/storms", () => {
       sampleIssueId: "issue-1",
       projects: ["proj-a", "proj-b"],
     });
+    expect(body.truncated).toBe(false);
   });
 
   test("uses threshold query param", async () => {
     await GET(makeRequest({ threshold: "5" }));
-    expect(mockQueryRaw).toHaveBeenCalled();
+    const args = mockQueryRaw.mock.calls[0];
+    // Second variadic arg is the interpolated threshold value
+    expect(args[1]).toBe(5);
+  });
+
+  test("clamps threshold to minimum 2", async () => {
+    await GET(makeRequest({ threshold: "1" }));
+    const args = mockQueryRaw.mock.calls[0];
+    expect(args[1]).toBe(2);
+  });
+
+  test("falls back to default threshold 3 for non-numeric input", async () => {
+    await GET(makeRequest({ threshold: "abc" }));
+    const args = mockQueryRaw.mock.calls[0];
+    expect(args[1]).toBe(3);
   });
 
   test("returns 500 when DB throws", async () => {
     mockQueryRaw.mockRejectedValue(new Error("DB error"));
     const res = await GET(makeRequest());
     expect(res.status).toBe(500);
+  });
+
+  test("sets truncated true when 10 rows are returned", async () => {
+    const tenRows = Array.from({ length: 10 }, (_, i) => ({
+      fingerprint: `fp-${i}`,
+      count: BigInt(3),
+      sampleTitle: "Error",
+      sampleIssueId: `issue-${i}`,
+      projectList: "proj-a",
+    }));
+    mockQueryRaw.mockResolvedValueOnce(tenRows);
+    const res = await GET(makeRequest());
+    const body = await res.json();
+    expect(body.truncated).toBe(true);
   });
 });

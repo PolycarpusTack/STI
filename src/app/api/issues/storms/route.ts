@@ -11,10 +11,8 @@ interface StormRow {
 
 export async function GET(request: NextRequest) {
   try {
-    const threshold = Math.max(
-      2,
-      parseInt(new URL(request.url).searchParams.get("threshold") ?? "3", 10)
-    );
+    const raw = parseInt(new URL(request.url).searchParams.get("threshold") ?? "3", 10);
+    const threshold = Math.max(2, isNaN(raw) ? 3 : raw);
 
     const rows = await db.$queryRaw<StormRow[]>`
       SELECT
@@ -45,7 +43,7 @@ export async function GET(request: NextRequest) {
       projects: r.projectList ? r.projectList.split(",") : [],
     }));
 
-    return NextResponse.json({ storms });
+    return NextResponse.json({ storms, truncated: rows.length === 10 });
   } catch (error) {
     console.error("Storms fetch error:", error);
     return NextResponse.json({ error: "Failed to detect storms", details: String(error) }, { status: 500 });
