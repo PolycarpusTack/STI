@@ -6,8 +6,6 @@ import { useCockpitStore } from "@/lib/store";
 import type { Issue } from "@/lib/types";
 import { relativeTime, formatDateTime, confidenceLevel, CONF_COLORS } from "@/lib/format";
 
-const CONF_COLOR = CONF_COLORS;
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function IssueDetail() {
@@ -262,7 +260,7 @@ export function IssueDetail() {
             {/* Confidence panel */}
             <div className="sta-conf-panel">
               <span className={`dot ${conf}`} />
-              <span className="word" style={{ color: CONF_COLOR[conf] }}>{conf}</span>
+              <span className="word" style={{ color: CONF_COLORS[conf] }}>{conf}</span>
               <span className="note">
                 {conf === "high"
                   ? "No caveats — inputs are complete and classification is clear."
