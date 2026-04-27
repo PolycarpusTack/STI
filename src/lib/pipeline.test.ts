@@ -10,7 +10,7 @@ const mockIssueUpsert = mock(async (args: { create: { sentryIssueId: string } })
 const mockBriefFindUnique = mock(async () => null);
 const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null }));
 const mockWriteMeta = mock((_patch: unknown) => undefined);
-const mockGenerateBrief = mock(async (_id: string) => undefined);
+const mockGenerateBrief = mock(async (_id: string, _config?: unknown) => undefined);
 
 mock.module("@/lib/db", () => ({
   db: {

@@ -8,7 +8,7 @@ import {
   extractRelease,
 } from "@/lib/sentry";
 import { scrub } from "@/lib/scrubber";
-import { generateBrief } from "@/lib/brief";
+import { generateBrief, LlmConfig } from "@/lib/brief";
 import { readMeta, writeMeta } from "@/lib/meta";
 import { getEffectiveSetting, SETTINGS_KEYS } from "@/lib/settings";
 
@@ -44,6 +44,15 @@ export async function getSentryConfig() {
           .filter(Boolean) as string[];
 
   return projects.length > 0 ? { token, org, projects } : null;
+}
+
+async function resolveLlmConfig(): Promise<LlmConfig> {
+  const [baseUrl, apiKey, model] = await Promise.all([
+    getEffectiveSetting(SETTINGS_KEYS.llmBaseUrl, "LLM_BASE_URL"),
+    getEffectiveSetting(SETTINGS_KEYS.llmApiKey, "LLM_API_KEY"),
+    getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
+  ]);
+  return { baseUrl, apiKey, model };
 }
 
 export async function ingestIssues(opts: {
@@ -138,13 +147,13 @@ export async function ingestIssues(opts: {
   return { stats, newIssueIds };
 }
 
-export async function briefIssues(ids: string[], stats: PipelineStats): Promise<void> {
+export async function briefIssues(ids: string[], stats: PipelineStats, config: LlmConfig): Promise<void> {
   for (let i = 0; i < ids.length; i += BRIEF_CONCURRENCY) {
     const batch = ids.slice(i, i + BRIEF_CONCURRENCY);
     await Promise.all(
       batch.map(async (id) => {
         try {
-          await generateBrief(id);
+          await generateBrief(id, config);
           stats.briefed++;
         } catch (err) {
           console.error(`[pipeline] Brief failed for ${id}:`, err);
@@ -173,19 +182,20 @@ export async function runPipeline(opts: { background?: boolean } = {}): Promise<
     const config = await getSentryConfig();
     if (!config) throw new Error("Sentry not configured");
 
+    const llmConfig = await resolveLlmConfig();
     const startTime = Date.now();
     const { stats, newIssueIds } = await ingestIssues(config);
     writeMeta({ lastPullAt: new Date().toISOString() });
 
     if (opts.background) {
-      void briefIssues(newIssueIds, stats)
+      void briefIssues(newIssueIds, stats, llmConfig)
         .then(() => writeMeta({ lastPullStats: { ...stats, durationMs: Date.now() - startTime } }))
         .catch((err) => console.error("[pipeline] Background brief error:", err))
         .finally(release);
       return { ...stats, durationMs: Date.now() - startTime };
     }
 
-    await briefIssues(newIssueIds, stats);
+    await briefIssues(newIssueIds, stats, llmConfig);
     const durationMs = Date.now() - startTime;
     writeMeta({ lastPullStats: { ...stats, durationMs } });
     release();

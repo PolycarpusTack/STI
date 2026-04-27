@@ -4,6 +4,12 @@ import AiClient from "z-ai-web-dev-sdk";
 import { getEffectiveSetting, SETTINGS_KEYS } from "@/lib/settings";
 import { VALID_LEANS, type Lean } from "@/lib/constants";
 
+export interface LlmConfig {
+  baseUrl: string | null;
+  apiKey: string | null;
+  model: string | null;
+}
+
 // ─── Sentinel System Prompt ───────────────────────────────────────────────────
 
 const SENTINEL_SYSTEM_PROMPT = `You are Sentinel, a Senior Incident Triage Analyst. Your job is to analyze Sentry issues and produce clear, actionable, prioritized triage outputs for a human support or engineering team. You do not summarize. You make decisions.
@@ -298,7 +304,7 @@ export function parseSentinelResponse(raw: string): SentinelOutput | null {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export async function generateBrief(issueId: string) {
+export async function generateBrief(issueId: string, config?: LlmConfig) {
   const issue = await db.issue.findUnique({ where: { id: issueId } });
   if (!issue) throw new Error(`Issue ${issueId} not found`);
 
@@ -320,11 +326,16 @@ export async function generateBrief(issueId: string) {
     projectId: issue.projectId,
   };
 
-  const [llmBaseUrl, llmApiKey, llmModel] = await Promise.all([
-    getEffectiveSetting(SETTINGS_KEYS.llmBaseUrl, "LLM_BASE_URL"),
-    getEffectiveSetting(SETTINGS_KEYS.llmApiKey, "LLM_API_KEY"),
-    getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
-  ]);
+  let resolved = config;
+  if (!resolved) {
+    const [llmBaseUrl, llmApiKey, llmModel] = await Promise.all([
+      getEffectiveSetting(SETTINGS_KEYS.llmBaseUrl, "LLM_BASE_URL"),
+      getEffectiveSetting(SETTINGS_KEYS.llmApiKey, "LLM_API_KEY"),
+      getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
+    ]);
+    resolved = { baseUrl: llmBaseUrl, apiKey: llmApiKey, model: llmModel };
+  }
+  const { baseUrl: llmBaseUrl, apiKey: llmApiKey, model: llmModel } = resolved;
   const model = llmModel ?? "gpt-4o";
 
   const messages = [
