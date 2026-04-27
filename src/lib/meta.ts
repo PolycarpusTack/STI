@@ -1,17 +1,9 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
+import type { PipelineStats } from "@/lib/pipeline";
 
 const META_PATH = join(process.cwd(), "db", "meta.json");
 const META_TMP  = META_PATH + ".tmp";
-
-export interface PipelineStats {
-  ingested: number;
-  briefed: number;
-  skipped: number;
-  suppressed: number;
-  errors: number;
-  durationMs: number;
-}
 
 export interface Meta {
   lastPullAt: string | null;
