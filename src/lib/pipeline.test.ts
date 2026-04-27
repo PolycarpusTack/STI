@@ -6,8 +6,8 @@ const mockSentryProjectFindMany = mock(async () => [] as { slug: string }[]);
 const mockIssueUpsert = mock(async (args: { create: { sentryIssueId: string } }) => ({
   id: "issue-1",
   sentryIssueId: args.create.sentryIssueId,
+  brief: null,
 }));
-const mockBriefFindUnique = mock(async () => null);
 const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null }));
 const mockWriteMeta = mock((_patch: unknown) => undefined);
 const mockGenerateBrief = mock(async (_id: string, _config?: unknown) => undefined);
@@ -18,7 +18,6 @@ mock.module("@/lib/db", () => ({
     suppression:   { findMany: mockSuppressionFindMany },
     sentryProject: { findMany: mockSentryProjectFindMany },
     issue:         { upsert: mockIssueUpsert },
-    brief:         { findUnique: mockBriefFindUnique },
   },
 }));
 
@@ -122,11 +121,9 @@ describe("ingestIssues — fingerprint fallback", () => {
   beforeEach(() => {
     mockSuppressionFindMany.mockReset();
     mockIssueUpsert.mockReset();
-    mockBriefFindUnique.mockReset();
     mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null });
     mockSuppressionFindMany.mockResolvedValue([]);
-    mockBriefFindUnique.mockResolvedValue(null);
-    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-1" });
+    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-1", brief: null });
   });
 
   afterEach(() => {
@@ -148,7 +145,7 @@ describe("ingestIssues — fingerprint fallback", () => {
 
   test("falls back to issue ID when fingerprints array is empty", async () => {
     const issue = makeSentryIssue("S-99", []);
-    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-99" });
+    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-99", brief: null });
     globalThis.fetch = mock()
       .mockImplementationOnce(() => jsonResponse([issue]))  // fetchSentryIssues
       .mockImplementationOnce(() => jsonResponse({}))       // fetchLatestEvent (parallel)
@@ -181,7 +178,7 @@ describe("ingestIssues — fingerprint fallback", () => {
       .mockImplementationOnce(() => jsonResponse([issue2]))                        // proj-b list
       .mockImplementationOnce(() => jsonResponse({}))                              // fetchLatestEvent for S-2 (parallel)
       .mockImplementationOnce(() => statsResponse());                              // fetchIssueStats for S-2 (parallel)
-    mockIssueUpsert.mockResolvedValue({ id: "issue-2", sentryIssueId: "S-2" });
+    mockIssueUpsert.mockResolvedValue({ id: "issue-2", sentryIssueId: "S-2", brief: null });
 
     const { stats } = await ingestIssues(multiOpts);
 
@@ -202,8 +199,8 @@ describe("ingestIssues — fingerprint fallback", () => {
       .mockImplementationOnce(() => jsonResponse({}))        // fetchLatestEvent for S-2 (parallel)
       .mockImplementationOnce(() => statsResponse());        // fetchIssueStats for S-2 (parallel)
     mockIssueUpsert
-      .mockResolvedValueOnce({ id: "issue-1", sentryIssueId: "S-1" })
-      .mockResolvedValueOnce({ id: "issue-2", sentryIssueId: "S-2" });
+      .mockResolvedValueOnce({ id: "issue-1", sentryIssueId: "S-1", brief: null })
+      .mockResolvedValueOnce({ id: "issue-2", sentryIssueId: "S-2", brief: null });
 
     const { stats } = await ingestIssues(multiOpts);
 
@@ -242,10 +239,8 @@ describe("ingestIssues — statsJson", () => {
   beforeEach(() => {
     mockSuppressionFindMany.mockReset();
     mockSuppressionFindMany.mockResolvedValue([]);
-    mockBriefFindUnique.mockReset();
-    mockBriefFindUnique.mockResolvedValue(null);
     mockIssueUpsert.mockReset();
-    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "s1" });
+    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "s1", brief: null });
     // fetchSentryIssues → one issue; then in parallel: fetchLatestEvent + fetchIssueStats
     globalThis.fetch = mock()
       .mockImplementationOnce(() => jsonResponse([statsIssue]))    // fetchSentryIssues

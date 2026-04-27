@@ -121,15 +121,12 @@ export async function ingestIssues(opts: {
                   tags: JSON.stringify(si.tags),
                   statsJson,
                 },
+                include: { brief: { select: { id: true } } },
               });
 
               stats.ingested++;
 
-              const hasBrief = await db.brief.findUnique({
-                where: { issueId: issue.id },
-                select: { id: true },
-              });
-              if (!hasBrief) newIssueIds.push(issue.id);
+              if (!issue.brief) newIssueIds.push(issue.id);
               else stats.skipped++;
             } catch (err) {
               console.error(`[pipeline] Issue ${si.id} failed:`, err);
