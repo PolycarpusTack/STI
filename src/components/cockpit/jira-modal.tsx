@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useCockpitStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import type { Issue } from "./issue-list";
+import type { Issue } from "@/lib/types";
 
 function buildDescription(issue: Issue): string {
   const parts: string[] = [];

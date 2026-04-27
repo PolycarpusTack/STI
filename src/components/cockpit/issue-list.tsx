@@ -3,47 +3,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useCockpitStore } from "@/lib/store";
+import type { Issue } from "@/lib/types";
 import { relativeTime, confidenceLevel, CONF_COLORS } from "@/lib/format";
 import { StormBanner } from "@/components/cockpit/storm-banner";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface Issue {
-  id: string;
-  sentryId: string;
-  title: string;
-  level: string;
-  project: string;
-  environment: string;
-  culprit?: string;
-  release?: string;
-  eventCount: number;
-  firstSeen: string;
-  lastSeen: string;
-  fingerprint: string;
-  lean?: string | null;
-  confidence?: number | null;
-  stats?: number[] | null;
-  brief?: {
-    summary?: string;
-    module?: string;
-    tenantImpact?: string;
-    reproductionHint?: string;
-    priority?: string | null;
-    issueType?: string | null;
-    confidenceNotes?: string | null;
-    signals?: string | null;
-    promptVersion?: string;
-    parseError?: string | null;
-    rawResponse?: string | null;
-  } | null;
-  decision?: {
-    decision: string;
-    responder: string;
-    timestamp: string;
-    jiraKey?: string | null;
-  } | null;
-}
 
 interface IssuesResponse {
   issues: Issue[];

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useCockpitStore } from "@/lib/store";
-import type { Issue } from "./issue-list";
+import type { Issue } from "@/lib/types";
 
 export function SuppressModal() {
   const { suppressModalOpen, suppressModalIssueId, closeSuppressModal } = useCockpitStore();

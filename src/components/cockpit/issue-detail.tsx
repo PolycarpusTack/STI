@@ -3,7 +3,7 @@
 import { useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCockpitStore } from "@/lib/store";
-import type { Issue } from "./issue-list";
+import type { Issue } from "@/lib/types";
 import { relativeTime, formatDateTime, confidenceLevel, CONF_COLORS } from "@/lib/format";
 
 const CONF_COLOR = CONF_COLORS;
