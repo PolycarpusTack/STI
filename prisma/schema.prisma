@@ -24,6 +24,7 @@ model Issue {
   culprit       String   @default("")
   stacktrace    String?
   tags          String   @default("{}")
+  statsJson     String?
   brief         Brief?
   decisions     Decision[]
   suppressions  Suppression[]

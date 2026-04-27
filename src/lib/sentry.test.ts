@@ -5,6 +5,7 @@ import {
   extractRelease,
   fetchSentryIssues,
   fetchLatestEvent,
+  fetchIssueStats,
   validateSentryToken,
   type SentryIssue,
   type SentryEvent,
@@ -286,5 +287,40 @@ describe("fetchLatestEvent", () => {
     );
     const result = await fetchLatestEvent("issue-1", "token");
     expect(result).toBeNull();
+  });
+});
+
+// ── fetchIssueStats ───────────────────────────────────────────────────────────
+
+describe("fetchIssueStats", () => {
+  test("returns array of daily counts from Sentry stats API", async () => {
+    const statsData: [number, number][] = [
+      [1745280000, 10],
+      [1745366400, 5],
+      [1745452800, 20],
+      [1745539200, 15],
+      [1745625600, 30],
+      [1745712000, 25],
+      [1745798400, 40],
+    ];
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify(statsData), { status: 200 }))
+    );
+
+    const counts = await fetchIssueStats("issue-123", "token-abc");
+
+    expect(counts).toEqual([10, 5, 20, 15, 30, 25, 40]);
+    const calledUrl = (globalThis.fetch as ReturnType<typeof mock>).mock.calls[0][0] as string;
+    expect(calledUrl).toContain("/issues/issue-123/stats/");
+  });
+
+  test("returns empty array when Sentry stats API fails", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("Forbidden", { status: 403 }))
+    );
+
+    const counts = await fetchIssueStats("issue-xyz", "bad-token");
+
+    expect(counts).toEqual([]);
   });
 });

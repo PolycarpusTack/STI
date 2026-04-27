@@ -148,6 +148,16 @@ export async function fetchSentryOrgProjects(
   return results;
 }
 
+export async function fetchIssueStats(issueId: string, token: string): Promise<number[]> {
+  const resp = await sentryFetch(
+    `/issues/${issueId}/stats/?statsPeriod=7d&resolution=1d`,
+    token
+  );
+  if (!resp.ok) return [];
+  const data = await resp.json() as [number, number][];
+  return data.map(([, count]) => count);
+}
+
 export async function validateSentryToken(opts: {
   token: string;
   org: string;
