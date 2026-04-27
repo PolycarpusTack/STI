@@ -2,11 +2,13 @@ import { describe, test, expect, mock, beforeEach } from "bun:test";
 
 const mockGetSetting = mock(() => Promise.resolve(null));
 const mockSetSetting = mock(() => Promise.resolve());
+const mockGetEffectiveSetting = mock(() => Promise.resolve(null));
 const mockDeleteMany = mock(() => Promise.resolve({ count: 0 }));
 
 mock.module("@/lib/settings", () => ({
   getSetting: mockGetSetting,
   setSetting: mockSetSetting,
+  getEffectiveSetting: mockGetEffectiveSetting,
   SETTINGS_KEYS: {
     sentryToken: "sentry.token",
     sentryOrg: "sentry.org",
@@ -40,19 +42,24 @@ const makeGetRequest = () =>
   new Request("http://localhost/api/settings") as import("next/server").NextRequest;
 
 describe("GET /api/settings — Jira fields", () => {
-  beforeEach(() => mockGetSetting.mockReset());
+  beforeEach(() => {
+    mockGetSetting.mockReset();
+    mockGetEffectiveSetting.mockReset();
+  });
 
   test("returns jiraBaseUrl, jiraApiKey masked, jiraProjectKey", async () => {
     mockGetSetting
       .mockResolvedValueOnce(null)   // sentryToken
+      .mockResolvedValueOnce(null)   // llmApiKey
+      .mockResolvedValueOnce("jira-secret-token");  // jiraApiKey
+
+    mockGetEffectiveSetting
       .mockResolvedValueOnce(null)   // sentryOrg
       .mockResolvedValueOnce(null)   // pollIntervalMinutes
       .mockResolvedValueOnce(null)   // llmBaseUrl
-      .mockResolvedValueOnce(null)   // llmApiKey
       .mockResolvedValueOnce(null)   // llmModel
       .mockResolvedValueOnce("https://hive.atlassian.net")  // jiraBaseUrl
       .mockResolvedValueOnce("responder@hive.io")           // jiraEmail
-      .mockResolvedValueOnce("jira-secret-token")           // jiraApiKey
       .mockResolvedValueOnce("PLATFORM");                   // jiraProjectKey
 
     const res = await GET(makeGetRequest());
@@ -66,6 +73,7 @@ describe("GET /api/settings — Jira fields", () => {
 
   test("jiraApiKeySet is false when key is not set", async () => {
     mockGetSetting.mockResolvedValue(null);
+    mockGetEffectiveSetting.mockResolvedValue(null);
     const res = await GET(makeGetRequest());
     const body = await res.json();
     expect(body.jiraApiKeySet).toBe(false);

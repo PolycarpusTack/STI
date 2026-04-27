@@ -1,37 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSetting, setSetting, SETTINGS_KEYS } from "@/lib/settings";
+import { getSetting, setSetting, getEffectiveSetting, SETTINGS_KEYS } from "@/lib/settings";
 
 const TOKEN_MASK = "••••••••";
 
 export async function GET() {
   const [token, org, interval, llmBaseUrl, llmApiKey, llmModel, jiraBaseUrl, jiraEmail, jiraApiKey, jiraProjectKey] = await Promise.all([
     getSetting(SETTINGS_KEYS.sentryToken),
-    getSetting(SETTINGS_KEYS.sentryOrg),
-    getSetting(SETTINGS_KEYS.pollIntervalMinutes),
-    getSetting(SETTINGS_KEYS.llmBaseUrl),
+    getEffectiveSetting(SETTINGS_KEYS.sentryOrg, "SENTRY_ORG"),
+    getEffectiveSetting(SETTINGS_KEYS.pollIntervalMinutes, "POLL_INTERVAL_MINUTES"),
+    getEffectiveSetting(SETTINGS_KEYS.llmBaseUrl, "LLM_BASE_URL"),
     getSetting(SETTINGS_KEYS.llmApiKey),
-    getSetting(SETTINGS_KEYS.llmModel),
-    getSetting(SETTINGS_KEYS.jiraBaseUrl),
-    getSetting(SETTINGS_KEYS.jiraEmail),
+    getEffectiveSetting(SETTINGS_KEYS.llmModel, "LLM_MODEL"),
+    getEffectiveSetting(SETTINGS_KEYS.jiraBaseUrl, "JIRA_BASE_URL"),
+    getEffectiveSetting(SETTINGS_KEYS.jiraEmail, "JIRA_EMAIL"),
     getSetting(SETTINGS_KEYS.jiraApiKey),
-    getSetting(SETTINGS_KEYS.jiraProjectKey),
+    getEffectiveSetting(SETTINGS_KEYS.jiraProjectKey, "JIRA_PROJECT_KEY"),
   ]);
 
   return NextResponse.json({
     sentryToken: token ? TOKEN_MASK : null,
     sentryTokenSet: !!token,
-    sentryOrg: org ?? process.env.SENTRY_ORG ?? "",
-    pollIntervalMinutes: parseInt(interval ?? process.env.POLL_INTERVAL_MINUTES ?? "10", 10),
-    llmBaseUrl: llmBaseUrl ?? process.env.LLM_BASE_URL ?? "",
+    sentryOrg: org ?? "",
+    pollIntervalMinutes: parseInt(interval ?? "10", 10),
+    llmBaseUrl: llmBaseUrl ?? "",
     llmApiKey: llmApiKey ? TOKEN_MASK : null,
     llmApiKeySet: !!llmApiKey,
-    llmModel: llmModel ?? process.env.LLM_MODEL ?? "deepseek-chat",
-    jiraBaseUrl: jiraBaseUrl ?? process.env.JIRA_BASE_URL ?? "",
-    jiraEmail: jiraEmail ?? process.env.JIRA_EMAIL ?? "",
+    llmModel: llmModel ?? "deepseek-chat",
+    jiraBaseUrl: jiraBaseUrl ?? "",
+    jiraEmail: jiraEmail ?? "",
     jiraApiKey: jiraApiKey ? TOKEN_MASK : null,
     jiraApiKeySet: !!jiraApiKey,
-    jiraProjectKey: jiraProjectKey ?? process.env.JIRA_PROJECT_KEY ?? "",
+    jiraProjectKey: jiraProjectKey ?? "",
   });
 }
 
