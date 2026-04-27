@@ -99,9 +99,9 @@ async function countIssues(
   view: string,
   where: Record<string, unknown>,
   lean: string | null,
-  globalFps?: string[],
-  suppressedFps?: string[],
-  tenantSuppressions?: { fingerprint: string; tenantValue: string | null }[]
+  globalFps: string[],
+  suppressedFps: string[],
+  tenantSuppressions: { fingerprint: string; tenantValue: string | null }[]
 ): Promise<number> {
   switch (view) {
     case 'inbox': {
@@ -137,13 +137,10 @@ async function countIssues(
         },
       });
     case 'suppressed': {
-      const fpList = suppressedFps ?? (await db.suppression.findMany({
-        select: { fingerprint: true },
-      })).map((s) => s.fingerprint);
       return db.issue.count({
         where: {
           ...where,
-          fingerprint: { in: fpList },
+          fingerprint: { in: suppressedFps },
           ...(lean ? { brief: { lean } } : {}),
         },
       });
@@ -283,7 +280,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
     }
 
-    const total = await countIssues(view, where, lean, inboxGlobalFps, suppressedFps, inboxTenantSuppressions)
+    const total = await countIssues(view, where, lean, inboxGlobalFps ?? [], suppressedFps ?? [], inboxTenantSuppressions ?? [])
 
     return NextResponse.json({
       issues: issues.map(formatIssue),
