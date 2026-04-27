@@ -143,7 +143,6 @@ export async function POST(request: NextRequest) {
         decision,
         aiLean: brief?.lean ?? null,
         responderId: responderId ?? 'responder-1',
-        jiraId: null,
         jiraKey,
         jiraError,
         ...metaFields,

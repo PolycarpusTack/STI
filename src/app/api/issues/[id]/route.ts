@@ -60,7 +60,6 @@ export async function GET(
         responder: latestDecision.responderId,
         timestamp: latestDecision.createdAt.toISOString(),
         aiLean: latestDecision.aiLean,
-        jiraId: latestDecision.jiraId,
         jiraKey: latestDecision.jiraKey ?? null,
       } : null,
     }

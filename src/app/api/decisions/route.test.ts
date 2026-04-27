@@ -11,7 +11,7 @@ mock.module("@/lib/jira", () => ({
 
 const mockDecisionCreate = mock(() => Promise.resolve({
   id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-  responderId: "r1", jiraId: null, jiraKey: null, jiraSummary: null,
+  responderId: "r1", jiraKey: null, jiraSummary: null,
   jiraDescription: null, jiraPriority: null, jiraComponent: null,
   jiraError: null, suppressReason: null, suppressScope: null,
   suppressed: false, briefId: null, createdAt: new Date(),
@@ -82,7 +82,7 @@ describe("POST /api/decisions — Jira metadata persistence", () => {
     mockBriefFindUnique.mockResolvedValue({ id: "b1", lean: "jira" });
     mockDecisionCreate.mockResolvedValue({
       id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-      responderId: "r1", jiraId: null, jiraKey: null, jiraSummary: "Bug in auth",
+      responderId: "r1", jiraKey: null, jiraSummary: "Bug in auth",
       jiraDescription: "Long desc", jiraPriority: "high", jiraComponent: "auth",
       jiraError: null, suppressReason: null, suppressScope: null,
       suppressed: false, briefId: "b1", createdAt: new Date(),
@@ -106,7 +106,7 @@ describe("POST /api/decisions — Jira metadata persistence", () => {
   test("persists suppressReason and suppressScope when decision is 'suppress'", async () => {
     mockDecisionCreate.mockResolvedValue({
       id: "d1", issueId: "i1", decision: "suppress", aiLean: null,
-      responderId: "r1", jiraId: null, jiraKey: null, jiraSummary: null,
+      responderId: "r1", jiraKey: null, jiraSummary: null,
       jiraDescription: null, jiraPriority: null, jiraComponent: null,
       jiraError: null, suppressReason: "Bot traffic", suppressScope: "global",
       suppressed: false, briefId: null, createdAt: new Date(),
@@ -212,7 +212,7 @@ describe("POST /api/decisions — Jira call", () => {
     mockCreateJiraIssue.mockRejectedValueOnce(new Error("Auth failed"));
     mockDecisionCreate.mockResolvedValueOnce({
       id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-      responderId: "r1", jiraId: null, jiraKey: null, jiraSummary: null,
+      responderId: "r1", jiraKey: null, jiraSummary: null,
       jiraDescription: null, jiraPriority: null, jiraComponent: null,
       jiraError: "Auth failed", suppressReason: null, suppressScope: null,
       suppressed: false, briefId: "b1", createdAt: new Date(),

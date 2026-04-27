@@ -43,7 +43,6 @@ function formatIssue(issue: {
     decision: string
     aiLean: string | null
     responderId: string
-    jiraId: string | null
     jiraKey?: string | null
     suppressed: boolean
     createdAt: Date
