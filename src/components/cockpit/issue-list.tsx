@@ -22,6 +22,7 @@ export interface Issue {
   fingerprint: string;
   lean?: string | null;
   confidence?: number | null;
+  stats?: number[] | null;
   brief?: {
     summary?: string;
     module?: string;
@@ -46,6 +47,33 @@ export interface Issue {
 interface IssuesResponse {
   issues: Issue[];
   total: number;
+}
+
+// ─── Sparkline ───────────────────────────────────────────────────────────────
+
+function Sparkline({ counts }: { counts: number[] }) {
+  if (counts.length < 2) return null;
+  const max = Math.max(...counts, 1);
+  const W = 48;
+  const H = 14;
+  const pts = counts
+    .map((c, i) => `${(i / (counts.length - 1)) * W},${H - (c / max) * H}`)
+    .join(" ");
+  const last = counts[counts.length - 1];
+  const prev = counts[counts.length - 2];
+  const color = last > prev * 1.3 ? "#F87171" : "#2DD4BF";
+  return (
+    <svg width={W} height={H} style={{ display: "block", flexShrink: 0 }}>
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 // ─── Issue Row ───────────────────────────────────────────────────────────────
@@ -140,6 +168,9 @@ function IssueRow({
           <span className="k">evt</span>
           <span className="v">{issue.eventCount}</span>
         </span>
+        {issue.stats && issue.stats.length >= 2 && (
+          <Sparkline counts={issue.stats} />
+        )}
         <span className="sta-meta-pill">
           <span className="k">age</span>
           <span className="v">{relativeTime(issue.lastSeen)}</span>
