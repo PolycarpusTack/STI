@@ -385,6 +385,7 @@ export function IssueList() {
         {(currentView === "inbox" || currentView === "watchlist") && (
           <button
             className="sta-btn"
+            disabled={bulkPending}
             onClick={() => { setSelectMode((m) => !m); setCheckedIds(new Set()); }}
             style={{ marginLeft: "auto", padding: "3px 8px", fontSize: "9px" }}
           >
@@ -475,45 +476,53 @@ export function IssueList() {
       </div>
 
       {/* Bulk action bar */}
-      {selectMode && checkedIds.size > 0 && (
+      {selectMode && (
         <div style={{
           borderTop: "1px solid #1F2D45", padding: "8px 14px",
           background: "#111827", flexShrink: 0,
           display: "flex", gap: "6px", alignItems: "center",
         }}>
-          <span style={{
-            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
-            fontSize: "10px", color: "#3D4F68", marginRight: "4px",
-          }}>
-            {checkedIds.size} selected
-          </span>
-          {(["close", "watchlist", "investigate"] as const).map((action) => (
-            <button
-              key={action}
-              className={`sta-lean-badge sta-lean-${action}`}
-              disabled={bulkPending}
-              style={{ cursor: "pointer" }}
-              onClick={async () => {
-                setBulkPending(true);
-                try {
-                  await fetch("/api/decisions/bulk", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ issueIds: Array.from(checkedIds), decision: action }),
-                  });
-                  queryClient.invalidateQueries({ queryKey: ["issues"] });
-                  queryClient.invalidateQueries({ queryKey: ["metrics"] });
-                  queryClient.invalidateQueries({ queryKey: ["nav-count"] });
-                  setCheckedIds(new Set());
-                  setSelectMode(false);
-                } finally {
-                  setBulkPending(false);
-                }
-              }}
-            >
-              {action} all
-            </button>
-          ))}
+          {checkedIds.size > 0 && (
+            <>
+              <span style={{
+                fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+                fontSize: "10px", color: "#3D4F68", marginRight: "4px",
+              }}>
+                {checkedIds.size} selected
+              </span>
+              {(["close", "watchlist", "investigate"] as const).map((action) => (
+                <button
+                  key={action}
+                  className={`sta-lean-badge sta-lean-${action}`}
+                  disabled={bulkPending}
+                  style={{ cursor: "pointer" }}
+                  onClick={async () => {
+                    setBulkPending(true);
+                    try {
+                      const res = await fetch("/api/decisions/bulk", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ issueIds: Array.from(checkedIds), decision: action }),
+                      });
+                      if (!res.ok) {
+                        console.error("Bulk decision failed:", res.status);
+                        return;
+                      }
+                      queryClient.invalidateQueries({ queryKey: ["issues"] });
+                      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+                      queryClient.invalidateQueries({ queryKey: ["nav-count"] });
+                      setCheckedIds(new Set());
+                      setSelectMode(false);
+                    } finally {
+                      setBulkPending(false);
+                    }
+                  }}
+                >
+                  {action} all
+                </button>
+              ))}
+            </>
+          )}
           <button
             className="sta-btn"
             style={{ padding: "2px 8px", fontSize: "9px", marginLeft: "auto" }}
@@ -525,7 +534,7 @@ export function IssueList() {
               }
             }}
           >
-            {checkedIds.size === issues.length ? "Deselect all" : "Select all"}
+            {checkedIds.size === issues.length && issues.length > 0 ? "Deselect all" : `Select all ${issues.length}`}
           </button>
         </div>
       )}
