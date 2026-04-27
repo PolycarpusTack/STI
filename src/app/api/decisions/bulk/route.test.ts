@@ -69,6 +69,7 @@ describe("POST /api/decisions/bulk", () => {
     const body = await res.json();
     expect(body.succeeded).toBe(2);
     expect(body.failed).toBe(0);
+    expect(mockDecisionCreate).toHaveBeenCalledTimes(2);
   });
 
   test("skips issues that do not exist and counts them as failed", async () => {
@@ -83,5 +84,23 @@ describe("POST /api/decisions/bulk", () => {
     mockIssueFindUnique.mockRejectedValue(new Error("DB error"));
     const res = await POST(makeRequest({ issueIds: ["i1"], decision: "close" }));
     expect(res.status).toBe(500);
+  });
+
+  test("returns 400 when decision is jira", async () => {
+    const res = await POST(makeRequest({ issueIds: ["i1"], decision: "jira" }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("jira");
+  });
+
+  test("returns 400 when more than 200 issueIds", async () => {
+    const ids = Array.from({ length: 201 }, (_, i) => `id-${i}`);
+    const res = await POST(makeRequest({ issueIds: ids, decision: "close" }));
+    expect(res.status).toBe(400);
+  });
+
+  test("returns 400 when issueIds contains non-string items", async () => {
+    const res = await POST(makeRequest({ issueIds: ["valid", 42], decision: "close" }));
+    expect(res.status).toBe(400);
   });
 });
