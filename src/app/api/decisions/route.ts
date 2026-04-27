@@ -8,11 +8,9 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url)
     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10), 1), 500)
     const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0)
-    const responderId = url.searchParams.get('responderId')
     const disagreementsOnly = url.searchParams.get('disagreement') === 'true'
 
     const where: Record<string, unknown> = {}
-    if (responderId) where.responderId = responderId
 
     let filtered: Awaited<ReturnType<typeof db.decision.findMany<{ include: { issue: { include: { brief: true } } } }>>>
     let total: number
