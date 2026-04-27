@@ -83,11 +83,17 @@ function IssueRow({
   isSelected,
   isFocused,
   onClick,
+  isChecked,
+  selectMode,
+  onCheck,
 }: {
   issue: Issue;
   isSelected: boolean;
   isFocused: boolean;
   onClick: () => void;
+  isChecked: boolean;
+  selectMode: boolean;
+  onCheck: (checked: boolean) => void;
 }) {
   const lean = issue.lean ?? "";
   const conf = confidenceLevel(issue.confidence);
@@ -95,7 +101,13 @@ function IssueRow({
 
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        if (selectMode) {
+          onCheck(!isChecked);
+        } else {
+          onClick();
+        }
+      }}
       style={{
         display: "block", width: "100%", textAlign: "left",
         padding: "12px 14px",
@@ -113,6 +125,15 @@ function IssueRow({
         if (!isSelected) e.currentTarget.style.backgroundColor = isFocused ? "#1C2333" : "transparent";
       }}
     >
+      {selectMode && (
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={(e) => { e.stopPropagation(); onCheck(e.target.checked); }}
+          onClick={(e) => e.stopPropagation()}
+          style={{ marginRight: "8px", flexShrink: 0, accentColor: "#2DD4BF" }}
+        />
+      )}
       {/* Header: lean badge + id */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
         {lean && <span className={`sta-lean-badge sta-lean-${lean}`}>{lean}</span>}
@@ -266,8 +287,15 @@ export function IssueList() {
   });
 
   const [limit, setLimit] = useState(50);
-  // Reset limit when view or filters change.
-  useEffect(() => { setLimit(50); }, [currentView, filters.lean, filters.search, filters.level, filters.project, filters.since24h]);
+  const [selectMode, setSelectMode] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
+  // Reset limit and selection when view or filters change.
+  useEffect(() => {
+    setLimit(50);
+    setSelectMode(false);
+    setCheckedIds(new Set());
+  }, [currentView, filters.lean, filters.search, filters.level, filters.project, filters.since24h]);
 
   const params = new URLSearchParams({ view: currentView, limit: String(limit) });
   if (filters.lean) params.set("lean", filters.lean);
@@ -354,6 +382,15 @@ export function IssueList() {
         }}>
           {total}
         </span>
+        {(currentView === "inbox" || currentView === "watchlist") && (
+          <button
+            className="sta-btn"
+            onClick={() => { setSelectMode((m) => !m); setCheckedIds(new Set()); }}
+            style={{ marginLeft: "auto", padding: "3px 8px", fontSize: "9px" }}
+          >
+            {selectMode ? "Cancel" : "Select"}
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -437,6 +474,62 @@ export function IssueList() {
         )}
       </div>
 
+      {/* Bulk action bar */}
+      {selectMode && checkedIds.size > 0 && (
+        <div style={{
+          borderTop: "1px solid #1F2D45", padding: "8px 14px",
+          background: "#111827", flexShrink: 0,
+          display: "flex", gap: "6px", alignItems: "center",
+        }}>
+          <span style={{
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+            fontSize: "10px", color: "#3D4F68", marginRight: "4px",
+          }}>
+            {checkedIds.size} selected
+          </span>
+          {(["close", "watchlist", "investigate"] as const).map((action) => (
+            <button
+              key={action}
+              className={`sta-lean-badge sta-lean-${action}`}
+              disabled={bulkPending}
+              style={{ cursor: "pointer" }}
+              onClick={async () => {
+                setBulkPending(true);
+                try {
+                  await fetch("/api/decisions/bulk", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ issueIds: Array.from(checkedIds), decision: action }),
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["issues"] });
+                  queryClient.invalidateQueries({ queryKey: ["metrics"] });
+                  queryClient.invalidateQueries({ queryKey: ["nav-count"] });
+                  setCheckedIds(new Set());
+                  setSelectMode(false);
+                } finally {
+                  setBulkPending(false);
+                }
+              }}
+            >
+              {action} all
+            </button>
+          ))}
+          <button
+            className="sta-btn"
+            style={{ padding: "2px 8px", fontSize: "9px", marginLeft: "auto" }}
+            onClick={() => {
+              if (checkedIds.size === issues.length) {
+                setCheckedIds(new Set());
+              } else {
+                setCheckedIds(new Set(issues.map((i) => i.id)));
+              }
+            }}
+          >
+            {checkedIds.size === issues.length ? "Deselect all" : "Select all"}
+          </button>
+        </div>
+      )}
+
       {/* List */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {isLoading && <LoadingSkeleton />}
@@ -488,7 +581,17 @@ export function IssueList() {
                   issue={issue}
                   isSelected={issue.id === selectedIssueId}
                   isFocused={index === focusedIndex}
+                  isChecked={checkedIds.has(issue.id)}
+                  selectMode={selectMode}
                   onClick={() => selectIssue(issue.id)}
+                  onCheck={(checked) => {
+                    setCheckedIds((prev) => {
+                      const next = new Set(prev);
+                      if (checked) next.add(issue.id);
+                      else next.delete(issue.id);
+                      return next;
+                    });
+                  }}
                 />
               </div>
             ))}
