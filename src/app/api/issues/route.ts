@@ -18,6 +18,7 @@ function formatIssue(issue: {
   culprit: string
   stacktrace: string | null
   tags: string
+  statsJson: string | null
   brief: {
     id: string
     issueId: string
@@ -62,6 +63,7 @@ function formatIssue(issue: {
     firstSeen: issue.firstSeen.toISOString(),
     lastSeen: issue.lastSeen.toISOString(),
     fingerprint: issue.fingerprint,
+    stats: issue.statsJson ? (JSON.parse(issue.statsJson) as number[]) : null,
     culprit: issue.culprit,
     lean: issue.brief?.lean ?? null,
     confidence: issue.brief?.confidence ?? null,

@@ -115,7 +115,7 @@ describe("GET /api/issues — inbox excludes suppressed fingerprints", () => {
 // ── Tenant-scoped suppression (TASK-3.2) ─────────────────────────────────────
 
 const MINIMAL_ISSUE = (overrides: Partial<{
-  id: string; fingerprint: string; projectId: string;
+  id: string; fingerprint: string; projectId: string; statsJson: string | null;
 }> = {}) => ({
   id: overrides.id ?? "i1",
   sentryIssueId: "s1",
@@ -132,6 +132,7 @@ const MINIMAL_ISSUE = (overrides: Partial<{
   culprit: "",
   stacktrace: null,
   tags: "{}",
+  statsJson: overrides.statsJson !== undefined ? overrides.statsJson : null,
   brief: null,
   decisions: [],
 });
@@ -225,6 +226,38 @@ describe("GET /api/issues — project filter", () => {
     await GET(makeRequest({ view: "inbox", project: "my-proj" }));
     const countArg = mockIssueCount.mock.calls[0][0] as { where: Record<string, unknown> };
     expect(countArg.where.projectId).toBe("my-proj");
+  });
+});
+
+// ── Stats field ────────────────────────────────────────────────────────────────
+
+describe("GET /api/issues — stats field in response", () => {
+  beforeEach(() => {
+    mockIssueFindMany.mockReset();
+    mockSuppressionFindMany.mockReset();
+    mockSuppressionFindMany.mockResolvedValue([]);
+    mockIssueCount.mockReset();
+    mockIssueCount.mockResolvedValue(0);
+  });
+
+  test("includes parsed stats array in formatted issue", async () => {
+    mockSuppressionFindMany.mockResolvedValueOnce([]);
+    mockIssueFindMany.mockResolvedValueOnce([
+      MINIMAL_ISSUE({ statsJson: JSON.stringify([10, 5, 20, 15, 30, 25, 40]) }),
+    ]);
+    const res = await GET(makeRequest({ view: "inbox" }));
+    const body = await res.json();
+    expect(body.issues[0].stats).toEqual([10, 5, 20, 15, 30, 25, 40]);
+  });
+
+  test("returns null stats when statsJson is null", async () => {
+    mockSuppressionFindMany.mockResolvedValueOnce([]);
+    mockIssueFindMany.mockResolvedValueOnce([
+      MINIMAL_ISSUE({ statsJson: null }),
+    ]);
+    const res = await GET(makeRequest({ view: "inbox" }));
+    const body = await res.json();
+    expect(body.issues[0].stats).toBeNull();
   });
 });
 
