@@ -1,20 +1,16 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 
-const mockIssueFindUnique = mock(() =>
-  Promise.resolve({ id: "i1", sentryIssueId: "s1", title: "Test" })
+const mockIssueFindMany = mock(() => Promise.resolve([] as { id: string }[]));
+const mockBriefFindMany = mock(() =>
+  Promise.resolve([] as { id: string; issueId: string; lean: string }[])
 );
-const mockBriefFindUnique = mock(() =>
-  Promise.resolve({ id: "b1", lean: "close" })
-);
-const mockDecisionCreate = mock(() =>
-  Promise.resolve({ id: "d1", decision: "close", issueId: "i1" })
-);
+const mockDecisionCreateMany = mock(() => Promise.resolve({ count: 0 }));
 
 mock.module("@/lib/db", () => ({
   db: {
-    issue: { findUnique: mockIssueFindUnique },
-    brief: { findUnique: mockBriefFindUnique },
-    decision: { create: mockDecisionCreate },
+    issue: { findMany: mockIssueFindMany },
+    brief: { findMany: mockBriefFindMany },
+    decision: { createMany: mockDecisionCreateMany },
   },
 }));
 
@@ -30,12 +26,12 @@ function makeRequest(body: Record<string, unknown>) {
 
 describe("POST /api/decisions/bulk", () => {
   beforeEach(() => {
-    mockIssueFindUnique.mockReset();
-    mockBriefFindUnique.mockReset();
-    mockDecisionCreate.mockReset();
-    mockIssueFindUnique.mockResolvedValue({ id: "i1", sentryIssueId: "s1", title: "Test" });
-    mockBriefFindUnique.mockResolvedValue({ id: "b1", lean: "close" });
-    mockDecisionCreate.mockResolvedValue({ id: "d1", decision: "close", issueId: "i1" });
+    mockIssueFindMany.mockReset();
+    mockBriefFindMany.mockReset();
+    mockDecisionCreateMany.mockReset();
+    mockIssueFindMany.mockResolvedValue([{ id: "i1" }]);
+    mockBriefFindMany.mockResolvedValue([{ id: "b1", issueId: "i1", lean: "close" }]);
+    mockDecisionCreateMany.mockResolvedValue({ count: 1 });
   });
 
   test("returns 400 when issueIds is missing", async () => {
@@ -53,35 +49,33 @@ describe("POST /api/decisions/bulk", () => {
     expect(res.status).toBe(400);
   });
 
-  test("creates a decision for each valid issueId", async () => {
-    mockIssueFindUnique
-      .mockResolvedValueOnce({ id: "i1", sentryIssueId: "s1", title: "T1" })
-      .mockResolvedValueOnce({ id: "i2", sentryIssueId: "s2", title: "T2" });
-    mockBriefFindUnique
-      .mockResolvedValueOnce({ id: "b1", lean: "close" })
-      .mockResolvedValueOnce(null);
-    mockDecisionCreate
-      .mockResolvedValueOnce({ id: "d1", decision: "close", issueId: "i1" })
-      .mockResolvedValueOnce({ id: "d2", decision: "close", issueId: "i2" });
+  test("creates decisions for all found issueIds", async () => {
+    mockIssueFindMany.mockResolvedValue([{ id: "i1" }, { id: "i2" }]);
+    mockBriefFindMany.mockResolvedValue([
+      { id: "b1", issueId: "i1", lean: "close" },
+    ]);
+    mockDecisionCreateMany.mockResolvedValue({ count: 2 });
 
     const res = await POST(makeRequest({ issueIds: ["i1", "i2"], decision: "close" }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.succeeded).toBe(2);
     expect(body.failed).toBe(0);
-    expect(mockDecisionCreate).toHaveBeenCalledTimes(2);
+    expect(mockDecisionCreateMany).toHaveBeenCalledTimes(1);
   });
 
-  test("skips issues that do not exist and counts them as failed", async () => {
-    mockIssueFindUnique.mockResolvedValue(null);
+  test("counts issues not found in DB as failed", async () => {
+    mockIssueFindMany.mockResolvedValue([]);
+    mockBriefFindMany.mockResolvedValue([]);
     const res = await POST(makeRequest({ issueIds: ["missing"], decision: "watchlist" }));
     const body = await res.json();
     expect(body.succeeded).toBe(0);
     expect(body.failed).toBe(1);
+    expect(mockDecisionCreateMany).not.toHaveBeenCalled();
   });
 
   test("returns 500 when DB throws", async () => {
-    mockIssueFindUnique.mockRejectedValue(new Error("DB error"));
+    mockIssueFindMany.mockRejectedValue(new Error("DB error"));
     const res = await POST(makeRequest({ issueIds: ["i1"], decision: "close" }));
     expect(res.status).toBe(500);
   });

@@ -29,25 +29,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "all issueIds must be strings" }, { status: 400 });
     }
 
-    const results = await Promise.all(
-      (issueIds as string[]).map(async (issueId) => {
-        const issue = await db.issue.findUnique({ where: { id: issueId } });
-        if (!issue) return false;
-        const brief = await db.brief.findUnique({ where: { issueId } });
-        await db.decision.create({
-          data: {
+    // Batch-fetch all issues and briefs in two queries instead of 2×N
+    const [issues, briefs] = await Promise.all([
+      db.issue.findMany({
+        where: { id: { in: issueIds as string[] } },
+        select: { id: true },
+      }),
+      db.brief.findMany({
+        where: { issueId: { in: issueIds as string[] } },
+        select: { id: true, issueId: true, lean: true },
+      }),
+    ]);
+
+    const issueSet = new Set(issues.map((i) => i.id));
+    const briefMap = new Map(briefs.map((b) => [b.issueId, b]));
+
+    const validIds = (issueIds as string[]).filter((id) => issueSet.has(id));
+
+    if (validIds.length > 0) {
+      await db.decision.createMany({
+        data: validIds.map((issueId) => {
+          const brief = briefMap.get(issueId) ?? null;
+          return {
             issueId,
             briefId: brief?.id ?? null,
             decision,
             aiLean: brief?.lean ?? null,
             responderId,
-          },
-        });
-        return true;
-      })
-    );
-    const succeeded = results.filter(Boolean).length;
-    const failed = results.length - succeeded;
+          };
+        }),
+      });
+    }
+
+    const succeeded = validIds.length;
+    const failed = (issueIds as string[]).length - succeeded;
 
     return NextResponse.json({ succeeded, failed });
   } catch (error) {
