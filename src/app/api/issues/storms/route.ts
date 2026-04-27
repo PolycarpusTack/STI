@@ -26,8 +26,10 @@ export async function GET(request: NextRequest) {
       WHERE NOT EXISTS (
         SELECT 1 FROM "Decision" d WHERE d."issueId" = i.id
       )
-      AND i.fingerprint NOT IN (
-        SELECT fingerprint FROM "Suppression" WHERE scope = 'global'
+      AND NOT EXISTS (
+        SELECT 1 FROM "Suppression" s
+        WHERE s.fingerprint = i.fingerprint
+        AND (s.scope = 'global' OR (s.scope = 'tenant' AND s."tenantValue" = i."projectId"))
       )
       GROUP BY i.fingerprint
       HAVING COUNT(*) >= ${threshold}

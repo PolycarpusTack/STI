@@ -29,15 +29,18 @@ function NavCount({ view }: { view: ViewType }) {
     queryFn: async () => {
       if (view === "decisions") {
         const res = await fetch("/api/decisions?limit=1");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         return json.total ?? 0;
       }
       if (view === "suppressed") {
         const res = await fetch("/api/suppressions");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         return Array.isArray(json) ? json.length : 0;
       }
       const res = await fetch(`/api/issues?view=${view}&limit=1`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.total ?? 0;
     },

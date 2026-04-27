@@ -67,8 +67,8 @@ export async function ingestIssues(opts: {
     ? new Date(meta.lastPullAt)
     : new Date(Date.now() - COLD_START_HOURS * 3_600_000);
 
-  const suppressions = await db.suppression.findMany({ select: { fingerprint: true } });
-  const suppressedFps = new Set(suppressions.map((s) => s.fingerprint));
+  const suppressions = await db.suppression.findMany({ select: { id: true, fingerprint: true } });
+  const suppressedFps = new Map(suppressions.map((s) => [s.fingerprint, s.id]));
   const newIssueIds: string[] = [];
 
   for (const project of opts.projects) {
@@ -81,7 +81,12 @@ export async function ingestIssues(opts: {
           batch.map(async (si) => {
             try {
               const fingerprint = si.fingerprints?.[0] ?? si.id;
-              if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
+              const suppressionId = suppressedFps.get(fingerprint);
+              if (suppressionId !== undefined) {
+                stats.suppressed++;
+                await db.suppression.update({ where: { id: suppressionId }, data: { lastMatchedAt: new Date() } });
+                return;
+              }
 
               const [event, dailyCounts] = await Promise.all([
                 fetchLatestEvent(si.id, opts.token),

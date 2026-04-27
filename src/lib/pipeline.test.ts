@@ -1,7 +1,8 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 
 const mockSettingFindUnique = mock(async () => null as { key: string; value: string } | null);
-const mockSuppressionFindMany = mock(async () => [] as { fingerprint: string }[]);
+const mockSuppressionFindMany = mock(async () => [] as { id: string; fingerprint: string }[]);
+const mockSuppressionUpdate = mock(async () => ({} as { id: string }));
 const mockSentryProjectFindMany = mock(async () => [] as { slug: string }[]);
 const mockIssueUpsert = mock(async (args: { create: { sentryIssueId: string } }) => ({
   id: "issue-1",
@@ -15,7 +16,7 @@ const mockGenerateBrief = mock(async (_id: string, _config?: unknown) => undefin
 mock.module("@/lib/db", () => ({
   db: {
     setting:       { findUnique: mockSettingFindUnique },
-    suppression:   { findMany: mockSuppressionFindMany },
+    suppression:   { findMany: mockSuppressionFindMany, update: mockSuppressionUpdate },
     sentryProject: { findMany: mockSentryProjectFindMany },
     issue:         { upsert: mockIssueUpsert },
   },
@@ -158,7 +159,7 @@ describe("ingestIssues — fingerprint fallback", () => {
   });
 
   test("skips suppressed fingerprints and increments suppressed count", async () => {
-    mockSuppressionFindMany.mockResolvedValue([{ fingerprint: "fp-suppressed" }]);
+    mockSuppressionFindMany.mockResolvedValue([{ id: "sup-1", fingerprint: "fp-suppressed" }]);
     const issue = makeSentryIssue("S-100", ["fp-suppressed"]);
     globalThis.fetch = mock()
       .mockImplementationOnce(() => jsonResponse([issue]));

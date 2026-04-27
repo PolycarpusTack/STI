@@ -1,11 +1,11 @@
 {
-  "lastPullAt": "2026-04-27T12:17:11.035Z",
+  "lastPullAt": "2026-04-27T13:32:43.503Z",
   "lastPullStats": {
     "ingested": 0,
     "briefed": 0,
     "skipped": 0,
     "suppressed": 0,
-    "errors": 5,
-    "durationMs": 81587
+    "errors": 12,
+    "durationMs": 123767
   }
 }
