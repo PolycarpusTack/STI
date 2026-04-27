@@ -510,6 +510,7 @@ export function IssueList() {
                         return;
                       }
                       queryClient.invalidateQueries({ queryKey: ["issues"] });
+                      queryClient.invalidateQueries({ queryKey: ["decisions"] });
                       queryClient.invalidateQueries({ queryKey: ["metrics"] });
                       queryClient.invalidateQueries({ queryKey: ["nav-count"] });
                       setCheckedIds(new Set());
