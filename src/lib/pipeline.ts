@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import {
   fetchSentryIssues,
   fetchLatestEvent,
+  fetchIssueStats,
   extractStacktrace,
   extractEnvironment,
   extractRelease,
@@ -11,7 +12,7 @@ import { generateBrief } from "@/lib/brief";
 import { readMeta, writeMeta } from "@/lib/meta";
 import { getEffectiveSetting, SETTINGS_KEYS } from "@/lib/settings";
 
-const COLD_START_HOURS = 24;
+const COLD_START_HOURS = 24 * 7; // 7-day lookback on first pull
 const BRIEF_CONCURRENCY = 3;
 const EVENT_CONCURRENCY = 5;
 
@@ -73,10 +74,14 @@ export async function ingestIssues(opts: {
               const fingerprint = si.fingerprints[0] ?? si.id;
               if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
 
-              const event = await fetchLatestEvent(si.id, opts.token);
+              const [event, dailyCounts] = await Promise.all([
+                fetchLatestEvent(si.id, opts.token),
+                fetchIssueStats(si.id, opts.token),
+              ]);
               const rawStacktrace = extractStacktrace(event);
               const environment = extractEnvironment(si, event);
               const release = extractRelease(event);
+              const statsJson = dailyCounts.length > 0 ? JSON.stringify(dailyCounts) : null;
 
               const issue = await db.issue.upsert({
                 where: { sentryIssueId: si.id },
@@ -95,6 +100,7 @@ export async function ingestIssues(opts: {
                   culprit: scrub(si.culprit ?? ""),
                   stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
                   tags: JSON.stringify(si.tags),
+                  statsJson,
                 },
                 update: {
                   eventCount: parseInt(si.count, 10),
@@ -104,6 +110,7 @@ export async function ingestIssues(opts: {
                   release,
                   stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
                   tags: JSON.stringify(si.tags),
+                  statsJson,
                 },
               });
 

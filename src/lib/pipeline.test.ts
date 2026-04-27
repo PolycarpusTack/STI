@@ -112,6 +112,9 @@ const makeSentryIssue = (id: string, fingerprints: string[]) => ({
 const jsonResponse = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }));
 
+// Reusable empty-stats response (fetchIssueStats returns non-ok → empty array)
+const statsResponse = () => jsonResponse([], 200);
+
 describe("ingestIssues — fingerprint fallback", () => {
   const opts = { token: "tok", org: "org", projects: ["proj"] };
   const _originalFetch = globalThis.fetch;
@@ -133,8 +136,9 @@ describe("ingestIssues — fingerprint fallback", () => {
   test("uses first fingerprint when fingerprints array is non-empty", async () => {
     const issue = makeSentryIssue("S-1", ["fp-custom-fingerprint", "fp-secondary"]);
     globalThis.fetch = mock()
-      .mockImplementationOnce(() => jsonResponse([issue]))
-      .mockImplementationOnce(() => jsonResponse({}));
+      .mockImplementationOnce(() => jsonResponse([issue]))  // fetchSentryIssues
+      .mockImplementationOnce(() => jsonResponse({}))       // fetchLatestEvent (parallel)
+      .mockImplementationOnce(() => statsResponse());       // fetchIssueStats  (parallel)
 
     await ingestIssues(opts);
 
@@ -146,8 +150,9 @@ describe("ingestIssues — fingerprint fallback", () => {
     const issue = makeSentryIssue("S-99", []);
     mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-99" });
     globalThis.fetch = mock()
-      .mockImplementationOnce(() => jsonResponse([issue]))
-      .mockImplementationOnce(() => jsonResponse({}));
+      .mockImplementationOnce(() => jsonResponse([issue]))  // fetchSentryIssues
+      .mockImplementationOnce(() => jsonResponse({}))       // fetchLatestEvent (parallel)
+      .mockImplementationOnce(() => statsResponse());       // fetchIssueStats  (parallel)
 
     await ingestIssues(opts);
 
@@ -174,7 +179,8 @@ describe("ingestIssues — fingerprint fallback", () => {
     globalThis.fetch = mock()
       .mockImplementationOnce(() => Promise.reject(new Error("403 Forbidden")))  // proj-a fails
       .mockImplementationOnce(() => jsonResponse([issue2]))                        // proj-b list
-      .mockImplementationOnce(() => jsonResponse({}));                             // fetchLatestEvent for S-2
+      .mockImplementationOnce(() => jsonResponse({}))                              // fetchLatestEvent for S-2 (parallel)
+      .mockImplementationOnce(() => statsResponse());                              // fetchIssueStats for S-2 (parallel)
     mockIssueUpsert.mockResolvedValue({ id: "issue-2", sentryIssueId: "S-2" });
 
     const { stats } = await ingestIssues(multiOpts);
@@ -190,9 +196,11 @@ describe("ingestIssues — fingerprint fallback", () => {
     const issue2 = makeSentryIssue("S-2", ["fp-2"]);
     globalThis.fetch = mock()
       .mockImplementationOnce(() => jsonResponse([issue1]))  // fetchSentryIssues for proj-a
-      .mockImplementationOnce(() => jsonResponse({}))        // fetchLatestEvent for S-1
+      .mockImplementationOnce(() => jsonResponse({}))        // fetchLatestEvent for S-1 (parallel)
+      .mockImplementationOnce(() => statsResponse())         // fetchIssueStats for S-1 (parallel)
       .mockImplementationOnce(() => jsonResponse([issue2]))  // fetchSentryIssues for proj-b
-      .mockImplementationOnce(() => jsonResponse({}));       // fetchLatestEvent for S-2
+      .mockImplementationOnce(() => jsonResponse({}))        // fetchLatestEvent for S-2 (parallel)
+      .mockImplementationOnce(() => statsResponse());        // fetchIssueStats for S-2 (parallel)
     mockIssueUpsert
       .mockResolvedValueOnce({ id: "issue-1", sentryIssueId: "S-1" })
       .mockResolvedValueOnce({ id: "issue-2", sentryIssueId: "S-2" });
@@ -204,5 +212,64 @@ describe("ingestIssues — fingerprint fallback", () => {
     const calls = mockIssueUpsert.mock.calls;
     expect((calls[0][0] as { create: { sentryIssueId: string } }).create.sentryIssueId).toBe("S-1");
     expect((calls[1][0] as { create: { sentryIssueId: string } }).create.sentryIssueId).toBe("S-2");
+  });
+});
+
+// ── ingestIssues — statsJson ──────────────────────────────────────────────────
+
+describe("ingestIssues — statsJson", () => {
+  const _originalFetch = globalThis.fetch;
+  const statsIssue = {
+    id: "s1",
+    title: "Test error",
+    culprit: "test.ts:1",
+    firstSeen: new Date().toISOString(),
+    lastSeen: new Date().toISOString(),
+    level: "error",
+    status: "unresolved",
+    count: "1",
+    project: { id: "p1", slug: "proj", name: "Proj" },
+    tags: [],
+    fingerprints: ["fp-1"],
+  };
+  // Raw stats data returned by the Sentry stats endpoint
+  const rawStats: [number, number][] = [
+    [1745280000, 10], [1745366400, 5],  [1745452800, 20],
+    [1745539200, 15], [1745625600, 30], [1745712000, 25],
+    [1745798400, 40],
+  ];
+
+  beforeEach(() => {
+    mockSuppressionFindMany.mockReset();
+    mockSuppressionFindMany.mockResolvedValue([]);
+    mockBriefFindUnique.mockReset();
+    mockBriefFindUnique.mockResolvedValue(null);
+    mockIssueUpsert.mockReset();
+    mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "s1" });
+    // fetchSentryIssues → one issue; then in parallel: fetchLatestEvent + fetchIssueStats
+    globalThis.fetch = mock()
+      .mockImplementationOnce(() => jsonResponse([statsIssue]))    // fetchSentryIssues
+      .mockImplementationOnce(() => jsonResponse({}))              // fetchLatestEvent (parallel)
+      .mockImplementationOnce(() => jsonResponse(rawStats));       // fetchIssueStats  (parallel)
+  });
+
+  afterEach(() => {
+    globalThis.fetch = _originalFetch;
+  });
+
+  test("stores statsJson on issue upsert create", async () => {
+    await ingestIssues({ token: "tok", org: "org", projects: ["proj"] });
+    const upsertCall = mockIssueUpsert.mock.calls[0][0] as { create: { statsJson?: string } };
+    expect(upsertCall.create.statsJson).toBe(JSON.stringify([10, 5, 20, 15, 30, 25, 40]));
+  });
+
+  test("stores null statsJson when fetchIssueStats returns empty", async () => {
+    globalThis.fetch = mock()
+      .mockImplementationOnce(() => jsonResponse([statsIssue]))    // fetchSentryIssues
+      .mockImplementationOnce(() => jsonResponse({}))              // fetchLatestEvent (parallel)
+      .mockImplementationOnce(() => jsonResponse([], 403));        // fetchIssueStats fails → empty
+    await ingestIssues({ token: "tok", org: "org", projects: ["proj"] });
+    const upsertCall = mockIssueUpsert.mock.calls[0][0] as { create: { statsJson?: string | null } };
+    expect(upsertCall.create.statsJson).toBeNull();
   });
 });
