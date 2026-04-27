@@ -16,7 +16,7 @@ mock.module("@/lib/db", () => ({
   },
 }));
 
-const { getSetting, setSetting, getEffectiveSetting, getSettings, SETTINGS_KEYS } =
+const { getSetting, setSetting, getEffectiveSetting, SETTINGS_KEYS } =
   await import("@/lib/settings");
 
 // ── getSetting ────────────────────────────────────────────────────────────────
@@ -96,33 +96,6 @@ describe("getEffectiveSetting", () => {
     process.env[ENV_VAR] = "env-org";
     const result = await getEffectiveSetting("sentry.org", ENV_VAR);
     expect(result).toBe("env-org");
-  });
-});
-
-// ── getSettings ───────────────────────────────────────────────────────────────
-
-describe("getSettings", () => {
-  beforeEach(() => mockFindMany.mockReset());
-
-  test("returns a key-value map of all stored settings", async () => {
-    mockFindMany.mockResolvedValueOnce([
-      { key: "sentry.token", value: "tok123", updatedAt: new Date() },
-      { key: "sentry.org",   value: "my-org", updatedAt: new Date() },
-    ]);
-    const result = await getSettings();
-    expect(result).toEqual({ "sentry.token": "tok123", "sentry.org": "my-org" });
-  });
-
-  test("returns an empty object when no settings are stored", async () => {
-    mockFindMany.mockResolvedValueOnce([]);
-    const result = await getSettings();
-    expect(result).toEqual({});
-  });
-
-  test("calls findMany with no filter to return all settings", async () => {
-    mockFindMany.mockResolvedValueOnce([]);
-    await getSettings();
-    expect(mockFindMany).toHaveBeenCalledWith();
   });
 });
 

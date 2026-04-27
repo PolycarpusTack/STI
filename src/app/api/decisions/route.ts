@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { getJiraConfig, createJiraIssue } from '@/lib/jira'
+import { VALID_LEANS } from '@/lib/constants'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -12,44 +13,28 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {}
     if (responderId) where.responderId = responderId
-    if (disagreementsOnly) {
-      // Find decisions where aiLean is not null and differs from decision
-      where.NOT = { aiLean: null }
-    }
 
-    const decisions = await db.decision.findMany({
-      where,
-      include: {
-        issue: {
-          include: { brief: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    })
-
-    const filtered = disagreementsOnly
-      ? decisions.filter(d => d.aiLean && d.decision !== d.aiLean)
-      : decisions
-
+    let filtered: Awaited<ReturnType<typeof db.decision.findMany<{ include: { issue: { include: { brief: true } } } }>>>
     let total: number
+
     if (disagreementsOnly) {
-      // Can't express column-to-column comparison in Prisma; use raw SQL
-      if (responderId) {
-        const result = await db.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM "Decision"
-          WHERE "aiLean" IS NOT NULL AND "aiLean" != "decision" AND "responderId" = ${responderId}
-        `
-        total = Number(result[0].count)
-      } else {
-        const result = await db.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM "Decision"
-          WHERE "aiLean" IS NOT NULL AND "aiLean" != "decision"
-        `
-        total = Number(result[0].count)
-      }
+      // Prisma can't express column-to-column inequality; fetch all aiLean!=null rows and paginate in memory
+      const all = await db.decision.findMany({
+        where: { ...where, aiLean: { not: null } },
+        include: { issue: { include: { brief: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      const disagreements = all.filter(d => d.aiLean && d.decision !== d.aiLean)
+      total = disagreements.length
+      filtered = disagreements.slice(offset, offset + limit)
     } else {
+      filtered = await db.decision.findMany({
+        where,
+        include: { issue: { include: { brief: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      })
       total = await db.decision.count({ where })
     }
 
@@ -84,6 +69,10 @@ export async function POST(request: NextRequest) {
 
     if (!issueId || !decision) {
       return NextResponse.json({ error: 'issueId and decision are required' }, { status: 400 })
+    }
+
+    if (decision !== 'undo' && !VALID_LEANS.includes(decision)) {
+      return NextResponse.json({ error: `Invalid decision '${decision}'. Must be one of: ${VALID_LEANS.join(', ')}` }, { status: 400 })
     }
 
     const metaFields = metadata ? {

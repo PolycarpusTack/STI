@@ -14,8 +14,6 @@ export const SETTINGS_KEYS = {
   jiraProjectKey: "jira.projectKey",
 } as const;
 
-export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
-
 export async function getSetting(key: string): Promise<string | null> {
   const row = await db.setting.findUnique({ where: { key } });
   return row?.value ?? null;
@@ -27,11 +25,6 @@ export async function setSetting(key: string, value: string): Promise<void> {
     update: { value },
     create: { key, value },
   });
-}
-
-export async function getSettings() {
-  const rows = await db.setting.findMany();
-  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
 /** Reads a setting from DB, falls back to env var. */

@@ -71,7 +71,7 @@ export async function ingestIssues(opts: {
         await Promise.all(
           batch.map(async (si) => {
             try {
-              const fingerprint = si.fingerprints[0] ?? si.id;
+              const fingerprint = si.fingerprints?.[0] ?? si.id;
               if (suppressedFps.has(fingerprint)) { stats.suppressed++; return; }
 
               const [event, dailyCounts] = await Promise.all([

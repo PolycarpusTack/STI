@@ -35,11 +35,3 @@ async function scheduleNext() {
     void scheduleNext();
   }, intervalMs);
 }
-
-export function stopPoller() {
-  if (g._staPollerTimer) {
-    clearTimeout(g._staPollerTimer);
-    g._staPollerTimer = undefined;
-  }
-  g._staPollerStarted = false;
-}

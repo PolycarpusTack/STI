@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     const effectiveScope = scope ?? 'global'
-    const effectiveTenant = effectiveScope === 'tenant' ? (tenantValue ?? null) : null
+    if (effectiveScope === 'tenant' && !tenantValue) {
+      return NextResponse.json({ error: 'tenantValue is required when scope is "tenant"' }, { status: 400 })
+    }
+    const effectiveTenant = effectiveScope === 'tenant' ? tenantValue : null
 
     // Idempotent: return existing suppression if one already exists for this fingerprint+scope.
     const existing = await db.suppression.findFirst({
