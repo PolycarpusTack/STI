@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useCockpitStore } from "@/lib/store";
 import { relativeTime, confidenceLevel, CONF_COLORS } from "@/lib/format";
+import { StormBanner } from "@/components/cockpit/storm-banner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -538,6 +539,9 @@ export function IssueList() {
           </button>
         </div>
       )}
+
+      {/* Storm banner — inbox only */}
+      {currentView === "inbox" && <StormBanner />}
 
       {/* List */}
       <div style={{ flex: 1, overflowY: "auto" }}>
