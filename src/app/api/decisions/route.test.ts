@@ -166,7 +166,7 @@ describe("POST /api/decisions — Jira call", () => {
     mockCreateJiraIssue.mockReset();
     mockDecisionCreate.mockResolvedValue({
       id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-      responderId: "r1", jiraId: null, jiraKey: "PLATFORM-42", jiraSummary: "Bug",
+      responderId: "r1", jiraKey: "PLATFORM-42", jiraSummary: "Bug",
       jiraDescription: null, jiraPriority: null, jiraComponent: null,
       jiraError: null, suppressReason: null, suppressScope: null,
       suppressed: false, briefId: "b1", createdAt: new Date(),

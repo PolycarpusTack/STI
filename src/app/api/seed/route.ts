@@ -289,9 +289,9 @@ const briefs: { issueIdx: number; lean: string; confidence: number; summary: str
   { issueIdx: 12, lean: 'close', confidence: 0.97, summary: 'Automated vulnerability scanner traffic hitting admin endpoints. 2100 events from known bot patterns targeting /admin.php. Standard noise — no platform vulnerability. Nginx is correctly returning 403.', module: 'infrastructure', tenantImpact: 'None — bot/scanner traffic', reproductionHint: null },
 ]
 
-const decisions: { issueIdx: number; decision: string; aiLean: string; responderId: string; jiraId?: string }[] = [
-  { issueIdx: 0, decision: 'jira', aiLean: 'jira', responderId: 'user-alice', jiraId: 'WO-4821' },
-  { issueIdx: 1, decision: 'jira', aiLean: 'jira', responderId: 'user-bob', jiraId: 'WO-4822' },
+const decisions: { issueIdx: number; decision: string; aiLean: string; responderId: string }[] = [
+  { issueIdx: 0, decision: 'jira', aiLean: 'jira', responderId: 'user-alice' },
+  { issueIdx: 1, decision: 'jira', aiLean: 'jira', responderId: 'user-bob' },
   { issueIdx: 4, decision: 'close', aiLean: 'close', responderId: 'user-alice' },
   { issueIdx: 8, decision: 'close', aiLean: 'close', responderId: 'user-charlie' },
   { issueIdx: 12, decision: 'close', aiLean: 'close', responderId: 'user-bob' },
@@ -362,7 +362,6 @@ export async function POST() {
           decision: d.decision,
           aiLean: d.aiLean,
           responderId: d.responderId,
-          jiraId: d.jiraId ?? null,
         },
       })
     }
