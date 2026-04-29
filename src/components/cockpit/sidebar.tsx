@@ -16,11 +16,12 @@ function pipelineStatus(metrics: Metrics | undefined, isError: boolean) {
   return { label: "CRITICAL", color: "#F87171" };
 }
 
-const VIEWS: { view: ViewType; label: string }[] = [
-  { view: "inbox", label: "Inbox" },
-  { view: "watchlist", label: "Watchlist" },
-  { view: "decisions", label: "Decisions" },
-  { view: "suppressed", label: "Suppressed" },
+const VIEWS: { view: ViewType; label: string; showCount?: boolean }[] = [
+  { view: "inbox", label: "Inbox", showCount: true },
+  { view: "watchlist", label: "Watchlist", showCount: true },
+  { view: "decisions", label: "Decisions", showCount: true },
+  { view: "suppressed", label: "Suppressed", showCount: true },
+  { view: "team", label: "Team", showCount: false },
 ];
 
 function NavCount({ view }: { view: ViewType }) {
@@ -94,7 +95,7 @@ export function Sidebar() {
         }}>
           Views
         </div>
-        {VIEWS.map(({ view, label }) => {
+        {VIEWS.map(({ view, label, showCount }) => {
           const isActive = currentView === view;
           return (
             <button
@@ -125,7 +126,7 @@ export function Sidebar() {
               }}
             >
               <span>{label}</span>
-              <NavCount view={view} />
+              {showCount !== false && <NavCount view={view} />}
             </button>
           );
         })}

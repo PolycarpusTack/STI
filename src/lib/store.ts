@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type ViewType = "inbox" | "watchlist" | "decisions" | "suppressed" | "settings" | "help";
+export type ViewType = "inbox" | "watchlist" | "decisions" | "suppressed" | "team" | "settings" | "help";
 
 interface Filters {
   lean: string | null;

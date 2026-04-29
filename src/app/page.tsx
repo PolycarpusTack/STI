@@ -15,6 +15,7 @@ import { DecisionsView } from "@/components/cockpit/decisions-view";
 import { SuppressedView } from "@/components/cockpit/suppressed-view";
 import { SettingsView } from "@/components/cockpit/settings-view";
 import { HelpView } from "@/components/cockpit/help-view";
+import { TeamView } from "@/components/cockpit/team-view";
 import { KeyboardHints } from "@/components/cockpit/keyboard-hints";
 import {
   ResizablePanelGroup,
@@ -41,7 +42,7 @@ function StatusBar() {
     }}>
       <span><span style={{ color: "#4ADE80" }}>●</span> Connected</span>
       <span style={{ color: "#2E3F5C" }}>│</span>
-      <span>STA <span style={{ color: "#9BAAC4" }}>v1.0.0</span></span>
+      <span>STA <span style={{ color: "#9BAAC4" }}>v0.3</span></span>
       <span style={{ color: "#2E3F5C" }}>│</span>
       <span>Prompt <span style={{ color: "#9BAAC4" }}>v1.0.0-sentinel</span></span>
       <span style={{ color: "#2E3F5C" }}>│</span>
@@ -126,6 +127,12 @@ function CockpitContent() {
         {currentView === "suppressed" && (
           <div style={{ flex: 1, overflow: "hidden" }}>
             <SuppressedView />
+          </div>
+        )}
+
+        {currentView === "team" && (
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <TeamView />
           </div>
         )}
 
