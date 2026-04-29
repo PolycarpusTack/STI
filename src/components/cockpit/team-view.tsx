@@ -316,7 +316,11 @@ function RolesSection({ roles }: { roles: TeamRole[] }) {
           }}>
             {role.name}
             <button
-              onClick={() => removeMutation.mutate(role.id)}
+              onClick={() => {
+                if (window.confirm(`Remove role "${role.name}"?`)) {
+                  removeMutation.mutate(role.id);
+                }
+              }}
               style={{ background: "none", border: "none", color: "#3D4F68", cursor: "pointer", fontSize: "9px", padding: 0, fontFamily: "inherit" }}
               title="Remove role"
             >
@@ -419,7 +423,11 @@ function RosterSection({ members, roles }: { members: TeamMember[]; roles: TeamR
                 {m.defaultRole ? <RoleTag name={m.defaultRole.name} /> : <span style={{ color: "#3D4F68" }}>—</span>}
               </td>
               <td style={{ ...tdStyle, color: "#3D4F68" }}>{m.weeksOnDuty}</td>
-              <td style={tdStyle}><RemoveBtn onClick={() => removeMutation.mutate(m.id)} /></td>
+              <td style={tdStyle}><RemoveBtn onClick={() => {
+                if (window.confirm(`Remove "${m.name}" from the roster?`)) {
+                  removeMutation.mutate(m.id);
+                }
+              }} /></td>
             </tr>
           ))}
           {adding && (
