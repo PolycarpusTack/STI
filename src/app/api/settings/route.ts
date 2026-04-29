@@ -4,6 +4,18 @@ import { getSetting, setSetting, getEffectiveSetting, SETTINGS_KEYS } from "@/li
 
 const TOKEN_MASK = "••••••••";
 
+function isSafeExternalUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw.trim());
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname;
+    if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1$|localhost$)/i.test(h)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET() {
   const [token, org, interval, llmBaseUrl, llmApiKey, llmModel, jiraBaseUrl, jiraEmail, jiraApiKey, jiraProjectKey] = await Promise.all([
     getSetting(SETTINGS_KEYS.sentryToken),
@@ -50,7 +62,11 @@ export async function PUT(req: NextRequest) {
     updates.push(setSetting(SETTINGS_KEYS.pollIntervalMinutes, String(body.pollIntervalMinutes)));
   }
   if (typeof body.llmBaseUrl === "string") {
-    updates.push(setSetting(SETTINGS_KEYS.llmBaseUrl, body.llmBaseUrl.trim()));
+    const url = body.llmBaseUrl.trim();
+    if (url && !isSafeExternalUrl(url)) {
+      return NextResponse.json({ error: "llmBaseUrl must be an https:// URL on a public host" }, { status: 400 });
+    }
+    updates.push(setSetting(SETTINGS_KEYS.llmBaseUrl, url));
   }
   if (typeof body.llmApiKey === "string" && body.llmApiKey !== TOKEN_MASK) {
     updates.push(setSetting(SETTINGS_KEYS.llmApiKey, body.llmApiKey));
@@ -59,7 +75,11 @@ export async function PUT(req: NextRequest) {
     updates.push(setSetting(SETTINGS_KEYS.llmModel, body.llmModel.trim()));
   }
   if (typeof body.jiraBaseUrl === "string") {
-    updates.push(setSetting(SETTINGS_KEYS.jiraBaseUrl, body.jiraBaseUrl.trim()));
+    const url = body.jiraBaseUrl.trim();
+    if (url && !isSafeExternalUrl(url)) {
+      return NextResponse.json({ error: "jiraBaseUrl must be an https:// URL on a public host" }, { status: 400 });
+    }
+    updates.push(setSetting(SETTINGS_KEYS.jiraBaseUrl, url));
   }
   if (typeof body.jiraEmail === "string") {
     updates.push(setSetting(SETTINGS_KEYS.jiraEmail, body.jiraEmail.trim()));
