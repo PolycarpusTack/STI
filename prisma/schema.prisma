@@ -112,3 +112,45 @@ model SentryProject {
   label     String   @default("")
   createdAt DateTime @default(now())
 }
+
+model TeamRole {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  members   TeamMember[]
+  entries   RotaEntry[]
+}
+
+model TeamMember {
+  id            String      @id @default(cuid())
+  name          String
+  defaultRoleId String?
+  defaultRole   TeamRole?   @relation(fields: [defaultRoleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+  entries       RotaEntry[]
+}
+
+model WeeklyRota {
+  id        String      @id @default(cuid())
+  isoYear   Int
+  isoWeek   Int
+  notes     String      @default("")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  entries   RotaEntry[]
+
+  @@unique([isoYear, isoWeek])
+}
+
+model RotaEntry {
+  id       String     @id @default(cuid())
+  rotaId   String
+  rota     WeeklyRota @relation(fields: [rotaId], references: [id], onDelete: Cascade)
+  roleId   String
+  role     TeamRole   @relation(fields: [roleId], references: [id])
+  memberId String
+  member   TeamMember @relation(fields: [memberId], references: [id])
+
+  @@unique([rotaId, roleId])
+}
