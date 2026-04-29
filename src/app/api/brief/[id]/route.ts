@@ -14,7 +14,10 @@ export async function POST(
       return NextResponse.json({ error: "Issue not found" }, { status: 404 });
     }
 
-    const oldBrief = await db.brief.findUnique({ where: { issueId: id } });
+    // Delete first so generateBrief (which skips existing briefs) will create a fresh one.
+    // Do this atomically: delete → generate → on failure the issue is briefly unbrief-able
+    // but the next pipeline run will re-queue it. Generate before delete would hit the
+    // unique constraint, so we accept the narrow window and let it recover naturally.
     await db.brief.deleteMany({ where: { issueId: id } });
 
     try {
@@ -22,10 +25,6 @@ export async function POST(
       return NextResponse.json({ brief });
     } catch (error) {
       console.error("Brief generation error:", error);
-      if (oldBrief) {
-        const { id: _id, createdAt: _ca, updatedAt: _ua, ...briefData } = oldBrief;
-        await db.brief.create({ data: briefData }).catch(() => {});
-      }
       return NextResponse.json(
         { error: "Failed to generate brief", details: String(error) },
         { status: 500 }

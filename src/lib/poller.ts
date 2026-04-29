@@ -14,7 +14,14 @@ export function startPoller() {
 }
 
 async function scheduleNext() {
-  const raw = await getEffectiveSetting(SETTINGS_KEYS.pollIntervalMinutes, "POLL_INTERVAL_MINUTES");
+  let raw: string | null;
+  try {
+    raw = await getEffectiveSetting(SETTINGS_KEYS.pollIntervalMinutes, "POLL_INTERVAL_MINUTES");
+  } catch {
+    // DB not ready yet (common on first Turbopack boot) — retry after 5 s.
+    setTimeout(() => void scheduleNext(), 5_000);
+    return;
+  }
   const parsed = parseInt(raw ?? "10", 10);
   const intervalMs = (isNaN(parsed) ? 10 : Math.max(parsed, 1)) * 60_000;
 

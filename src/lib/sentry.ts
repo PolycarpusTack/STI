@@ -10,7 +10,7 @@ export interface SentryIssue {
   status: string;
   count: string;
   project: { id: string; slug: string; name: string };
-  tags: Array<{ key: string; value: string }>;
+  tags?: Array<{ key: string; value: string }>;
   fingerprints: string[];
 }
 
@@ -34,22 +34,35 @@ export async function fetchSentryIssues(
   opts: { org: string; project: string; token: string }
 ): Promise<SentryIssue[]> {
   const sinceIso = since.toISOString();
-  const params = new URLSearchParams({
-    query: `is:unresolved lastSeen:>${sinceIso}`,
-    limit: "100",
-    sort: "date",
-  });
+  const results: SentryIssue[] = [];
+  let cursor: string | null = null;
 
-  const resp = await sentryFetch(
-    `/projects/${opts.org}/${opts.project}/issues/?${params}`,
-    opts.token
-  );
+  do {
+    const params = new URLSearchParams({
+      query: `is:unresolved lastSeen:>${sinceIso}`,
+      limit: "100",
+      sort: "date",
+    });
+    if (cursor) params.set("cursor", cursor);
 
-  if (!resp.ok) {
-    throw new Error(`Sentry issues API ${resp.status}: ${await resp.text()}`);
-  }
+    const resp = await sentryFetch(
+      `/projects/${opts.org}/${opts.project}/issues/?${params}`,
+      opts.token
+    );
 
-  return resp.json();
+    if (!resp.ok) {
+      throw new Error(`Sentry issues API ${resp.status}: ${await resp.text()}`);
+    }
+
+    const page = await resp.json() as SentryIssue[];
+    results.push(...page);
+
+    const link = resp.headers.get("Link") ?? "";
+    const next = link.match(/<[^>]+>;\s*rel="next"[^,]*results="true"[^,]*cursor="([^"]+)"/);
+    cursor = next ? next[1] : null;
+  } while (cursor);
+
+  return results;
 }
 
 export async function fetchLatestEvent(
@@ -96,7 +109,7 @@ export function extractStacktrace(event: SentryEvent | null): string | null {
 
 export function extractEnvironment(issue: SentryIssue, event: SentryEvent | null): string {
   if (event?.environment) return event.environment;
-  return issue.tags.find((t) => t.key === "environment")?.value ?? "unknown";
+  return issue.tags?.find((t) => t.key === "environment")?.value ?? "unknown";
 }
 
 export function extractRelease(event: SentryEvent | null): string | null {

@@ -78,11 +78,15 @@ describe("POST /api/decisions — validation", () => {
 describe("POST /api/decisions — Jira metadata persistence", () => {
   beforeEach(() => {
     mockDecisionCreate.mockReset();
+    mockGetJiraConfig.mockReset();
+    mockCreateJiraIssue.mockReset();
     mockIssueFindUnique.mockResolvedValue({ id: "i1", sentryIssueId: "s1", title: "T" });
     mockBriefFindUnique.mockResolvedValue({ id: "b1", lean: "jira" });
+    mockGetJiraConfig.mockResolvedValue(JIRA_CONFIG);
+    mockCreateJiraIssue.mockResolvedValue({ key: "PLATFORM-42", id: "10042" });
     mockDecisionCreate.mockResolvedValue({
       id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-      responderId: "r1", jiraKey: null, jiraSummary: "Bug in auth",
+      responderId: "r1", jiraKey: "PLATFORM-42", jiraSummary: "Bug in auth",
       jiraDescription: "Long desc", jiraPriority: "high", jiraComponent: "auth",
       jiraError: null, suppressReason: null, suppressScope: null,
       suppressed: false, briefId: "b1", createdAt: new Date(),
@@ -207,31 +211,28 @@ describe("POST /api/decisions — Jira call", () => {
     expect(body.jiraKey).toBe("PLATFORM-42");
   });
 
-  test("saves decision with jiraError when Jira call throws", async () => {
+  test("returns jiraError without creating a decision when Jira call throws", async () => {
     mockGetJiraConfig.mockResolvedValueOnce(JIRA_CONFIG);
     mockCreateJiraIssue.mockRejectedValueOnce(new Error("Auth failed"));
-    mockDecisionCreate.mockResolvedValueOnce({
-      id: "d1", issueId: "i1", decision: "jira", aiLean: "jira",
-      responderId: "r1", jiraKey: null, jiraSummary: null,
-      jiraDescription: null, jiraPriority: null, jiraComponent: null,
-      jiraError: "Auth failed", suppressReason: null, suppressScope: null,
-      suppressed: false, briefId: "b1", createdAt: new Date(),
-    });
 
     const res = await POST(makePostRequest({ issueId: "i1", decision: "jira", metadata: { summary: "Crash" } }));
     expect(res.status).toBe(200);
 
-    const callArg = mockDecisionCreate.mock.calls[0][0] as { data: Record<string, unknown> };
-    expect(callArg.data.jiraKey).toBeNull();
-    expect(typeof callArg.data.jiraError).toBe("string");
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.jiraError).toBe("Auth failed");
+    // No decision should be recorded — issue stays in inbox so user can retry.
+    expect(mockDecisionCreate).not.toHaveBeenCalled();
   });
 
-  test("does not call createJiraIssue when Jira is not configured", async () => {
+  test("returns jiraError without creating a decision when Jira is not configured", async () => {
     mockGetJiraConfig.mockResolvedValueOnce(null);
 
-    await POST(makePostRequest({ issueId: "i1", decision: "jira" }));
+    const res = await POST(makePostRequest({ issueId: "i1", decision: "jira" }));
+    const body = await res.json() as Record<string, unknown>;
 
     expect(mockCreateJiraIssue).not.toHaveBeenCalled();
+    expect(body.jiraError).toBeTruthy();
+    expect(mockDecisionCreate).not.toHaveBeenCalled();
   });
 
   test("does not call getJiraConfig when decision is not 'jira'", async () => {

@@ -7,6 +7,10 @@ export interface Metrics {
   totalDecisions: number;
   llmModel: string | null;
   sentryConfigured: boolean;
+  pendingBriefs: number;
+  pollIntervalMinutes: number;
+  pipelineRunning: boolean;
+  lastCompletedAt: string | null;
 }
 
 export interface Issue {

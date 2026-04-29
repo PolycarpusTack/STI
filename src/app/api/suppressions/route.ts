@@ -5,23 +5,35 @@ export async function GET() {
   try {
     const suppressions = await db.suppression.findMany({
       orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: { issues: true },
-        },
-      },
     })
 
-    const formatted = suppressions.map(s => ({
-      id: s.id,
-      fingerprint: s.fingerprint,
-      reason: s.reason,
-      scope: s.scope,
-      author: s.authorId,
-      createdAt: s.createdAt.toISOString(),
-      lastMatched: s.lastMatchedAt?.toISOString() ?? null,
-      matchCount: s._count.issues,
-    }))
+    const fingerprints = suppressions.map(s => s.fingerprint)
+    const issueGroups = fingerprints.length > 0
+      ? await db.issue.groupBy({
+          by: ['fingerprint', 'projectId'],
+          where: { fingerprint: { in: fingerprints } },
+          _count: { id: true },
+        })
+      : []
+
+    const formatted = suppressions.map(s => {
+      const matchCount = issueGroups
+        .filter(r =>
+          r.fingerprint === s.fingerprint &&
+          (s.scope === 'global' || r.projectId === s.tenantValue)
+        )
+        .reduce((sum, r) => sum + r._count.id, 0)
+      return {
+        id: s.id,
+        fingerprint: s.fingerprint,
+        reason: s.reason,
+        scope: s.scope,
+        author: s.authorId,
+        createdAt: s.createdAt.toISOString(),
+        lastMatched: s.lastMatchedAt?.toISOString() ?? null,
+        matchCount,
+      }
+    })
 
     return NextResponse.json(formatted)
   } catch (error) {
@@ -40,6 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     const effectiveScope = scope ?? 'global'
+    if (effectiveScope !== 'global' && effectiveScope !== 'tenant') {
+      return NextResponse.json({ error: 'scope must be "global" or "tenant"' }, { status: 400 })
+    }
     if (effectiveScope === 'tenant' && !tenantValue) {
       return NextResponse.json({ error: 'tenantValue is required when scope is "tenant"' }, { status: 400 })
     }
@@ -48,10 +63,14 @@ export async function POST(request: NextRequest) {
     // Idempotent: return existing suppression if one already exists for this fingerprint+scope.
     const existing = await db.suppression.findFirst({
       where: { fingerprint, scope: effectiveScope, tenantValue: effectiveTenant },
-      include: { _count: { select: { issues: true } } },
     })
 
     if (existing) {
+      const matchCount = await db.issue.count({
+        where: effectiveScope === 'global'
+          ? { fingerprint }
+          : { fingerprint, projectId: effectiveTenant ?? undefined },
+      })
       return NextResponse.json({
         id: existing.id,
         fingerprint: existing.fingerprint,
@@ -60,7 +79,7 @@ export async function POST(request: NextRequest) {
         author: existing.authorId,
         createdAt: existing.createdAt.toISOString(),
         lastMatched: existing.lastMatchedAt?.toISOString() ?? null,
-        matchCount: existing._count.issues,
+        matchCount,
       })
     }
 

@@ -31,6 +31,7 @@ interface Suppression {
 export function SuppressedView() {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<Suppression | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data, isLoading, isError } = useQuery<Suppression[], Error>({
     queryKey: ["suppressions"],
@@ -38,7 +39,13 @@ export function SuppressedView() {
     staleTime: 15_000,
   });
 
-  const suppressions = Array.isArray(data) ? data : [];
+  const allSuppressions = Array.isArray(data) ? data : [];
+  const q = search.trim().toLowerCase();
+  const suppressions = q
+    ? allSuppressions.filter(
+        (s) => s.fingerprint.includes(q) || s.reason.toLowerCase().includes(q) || s.scope.includes(q)
+      )
+    : allSuppressions;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
@@ -50,7 +57,7 @@ export function SuppressedView() {
     },
   });
 
-  const totalMatched = suppressions.reduce((s, r) => s + r.matchCount, 0);
+  const totalMatched = allSuppressions.reduce((s, r) => s + r.matchCount, 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -68,9 +75,22 @@ export function SuppressedView() {
             Suppressions
           </span>
           <span style={{ fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#3D4F68", marginLeft: "10px" }}>
-            {suppressions.length} rules · {totalMatched} total matches
+            {q ? `${suppressions.length} of ${allSuppressions.length}` : allSuppressions.length} rules · {totalMatched} total matches
           </span>
         </div>
+        <input
+          type="text"
+          placeholder="filter by fingerprint, reason, scope…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            marginLeft: "auto", width: "260px",
+            background: "#1C2333", border: "1px solid #1F2D45", borderRadius: "3px",
+            padding: "5px 10px", fontSize: "11px", color: "#9BAAC4",
+            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
+            outline: "none",
+          }}
+        />
       </div>
 
       {/* Table */}

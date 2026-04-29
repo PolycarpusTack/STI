@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -20,12 +20,11 @@ export function SuppressModal() {
     enabled: !!suppressModalIssueId && suppressModalOpen,
   });
 
-  useEffect(() => {
-    if (!suppressModalOpen) {
-      setReason("");
-      setScope("global");
-    }
-  }, [suppressModalOpen]);
+  const handleClose = () => {
+    setReason("");
+    setScope("global");
+    closeSuppressModal();
+  };
 
   const suppressMutation = useMutation({
     mutationFn: async () => {
@@ -66,7 +65,7 @@ export function SuppressModal() {
   });
 
   return (
-    <DialogPrimitive.Root open={suppressModalOpen} onOpenChange={(open) => !open && closeSuppressModal()}>
+    <DialogPrimitive.Root open={suppressModalOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="sta-modal-overlay" />
         <DialogPrimitive.Content
@@ -118,8 +117,8 @@ export function SuppressModal() {
                   value={scope}
                   onChange={(e) => setScope(e.target.value as "global" | "tenant")}
                 >
-                  <option value="global">Global</option>
-                  <option value="tenant">Per-tenant</option>
+                  <option value="global">Global — suppress across all projects</option>
+                  <option value="tenant">Per-tenant — {issue?.project ?? "this project"} only</option>
                 </select>
               </div>
             </div>
@@ -128,7 +127,7 @@ export function SuppressModal() {
             <div className="sta-modal-footer">
               <button
                 className="sta-btn"
-                onClick={closeSuppressModal}
+                onClick={handleClose}
                 disabled={suppressMutation.isPending}
               >
                 Cancel
@@ -136,7 +135,7 @@ export function SuppressModal() {
               <button
                 className="sta-btn danger"
                 onClick={() => suppressMutation.mutate()}
-                disabled={suppressMutation.isPending || !reason}
+                disabled={suppressMutation.isPending || !reason || !issue}
                 style={{
                   color: "#F87171", borderColor: "#7A1515",
                   background: "rgba(248,113,113,0.06)",

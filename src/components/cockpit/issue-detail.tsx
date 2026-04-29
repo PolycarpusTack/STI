@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCockpitStore } from "@/lib/store";
 import type { Issue } from "@/lib/types";
@@ -193,6 +193,7 @@ export function IssueDetail() {
           Watchlist <span className="kbd">4</span>
         </button>
         <div style={{ flex: 1 }} />
+        <CopySentryUrlButton sentryId={issue.sentryId} />
         <button className="sta-btn danger" onClick={() => handleAction("suppress")} disabled={decisionMutation.isPending}>
           Suppress fingerprint <span className="kbd">S</span>
         </button>
@@ -250,7 +251,7 @@ export function IssueDetail() {
             }}>
               <div className={`sta-lean-big ${lean}`}>
                 <span className="word">{lean || "—"}</span>
-                <span className="label">{conf} · {confPct}%</span>
+                <span className="label">{conf ?? "—"} · {confPct}%</span>
               </div>
               <div style={{ color: "#F0F4FF", fontSize: "13.5px", lineHeight: 1.55 }}>
                 {issue.brief.summary}
@@ -258,15 +259,17 @@ export function IssueDetail() {
             </div>
 
             {/* Confidence panel */}
-            <div className="sta-conf-panel">
-              <span className={`dot ${conf}`} />
-              <span className="word" style={{ color: CONF_COLORS[conf] }}>{conf}</span>
-              <span className="note">
-                {conf === "high"
-                  ? "No caveats — inputs are complete and classification is clear."
-                  : `Confidence at ${confPct}% — review context before acting.`}
-              </span>
-            </div>
+            {conf && (
+              <div className="sta-conf-panel">
+                <span className={`dot ${conf}`} />
+                <span className="word" style={{ color: CONF_COLORS[conf] }}>{conf}</span>
+                <span className="note">
+                  {conf === "high"
+                    ? "No caveats — inputs are complete and classification is clear."
+                    : `Confidence at ${confPct}% — review context before acting.`}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -444,14 +447,48 @@ function GenerateBriefButton({ issueId, label = "Generate Brief" }: { issueId: s
     },
   });
 
+  const handleClick = () => {
+    if (label === "Regenerate" && !window.confirm("Delete the current brief and generate a new one?")) return;
+    mutation.mutate();
+  };
+
   return (
     <button
       className="sta-btn"
-      onClick={() => mutation.mutate()}
+      onClick={handleClick}
       disabled={mutation.isPending}
       style={{ display: "inline-flex" }}
     >
       {mutation.isPending ? "Generating…" : label}
+    </button>
+  );
+}
+
+function CopySentryUrlButton({ sentryId }: { sentryId: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const { data: settings } = useQuery<{ sentryOrg?: string }>({
+    queryKey: ["settings"],
+    queryFn: () => fetch("/api/settings").then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    staleTime: 5 * 60_000,
+  });
+
+  const handleCopy = async () => {
+    const org = settings?.sentryOrg;
+    const url = org
+      ? `https://sentry.io/organizations/${org}/issues/${sentryId}/`
+      : sentryId;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access denied — nothing to show, URL is not sensitive
+    }
+  };
+
+  return (
+    <button className="sta-btn" onClick={handleCopy} style={{ display: "inline-flex" }}>
+      {copied ? "Copied!" : "Copy Sentry URL"}
     </button>
   );
 }

@@ -29,6 +29,10 @@ function formatIssue(issue: {
     module: string
     tenantImpact: string
     reproductionHint: string | null
+    priority: string
+    issueType: string
+    confidenceNotes: string | null
+    signals: string | null
     rawResponse: string
     parseError: boolean
     tokenCount: number | null
@@ -100,8 +104,9 @@ async function countIssues(
   where: Record<string, unknown>,
   lean: string | null,
   globalFps: string[],
-  suppressedFps: string[],
-  tenantSuppressions: { fingerprint: string; tenantValue: string | null }[]
+  suppressedGlobalFps: string[],
+  tenantSuppressions: { fingerprint: string; tenantValue: string | null }[],
+  suppressedTenantSupps: { fingerprint: string; tenantValue: string | null }[]
 ): Promise<number> {
   switch (view) {
     case 'inbox': {
@@ -137,10 +142,14 @@ async function countIssues(
         },
       });
     case 'suppressed': {
+      const suppressedOR = [
+        ...(suppressedGlobalFps.length > 0 ? [{ fingerprint: { in: suppressedGlobalFps } }] : []),
+        ...suppressedTenantSupps.map(s => ({ fingerprint: s.fingerprint, projectId: s.tenantValue ?? undefined })),
+      ]
       return db.issue.count({
         where: {
           ...where,
-          fingerprint: { in: suppressedFps },
+          ...(suppressedOR.length > 0 ? { OR: suppressedOR } : { id: 'none' }),
           ...(lean ? { brief: { lean } } : {}),
         },
       });
@@ -193,6 +202,8 @@ export async function GET(request: NextRequest) {
     let inboxGlobalFps: string[] | undefined
     let inboxTenantSuppressions: { fingerprint: string; tenantValue: string | null }[] | undefined
     let suppressedFps: string[] | undefined
+    let suppressedGlobalFps: string[] = []
+    let suppressedTenantSupps: { fingerprint: string; tenantValue: string | null }[] = []
 
     switch (view) {
       case 'inbox': {
@@ -254,15 +265,22 @@ export async function GET(request: NextRequest) {
       }
 
       case 'suppressed': {
-        const suppressedFingerprints = await db.suppression.findMany({
-          select: { fingerprint: true },
+        const allSuppressions = await db.suppression.findMany({
+          select: { fingerprint: true, scope: true, tenantValue: true },
         })
-        const fpList = suppressedFingerprints.map(s => s.fingerprint)
-        suppressedFps = fpList
+        const globalSuppFps = allSuppressions.filter(s => s.scope === 'global').map(s => s.fingerprint)
+        const tenantSupps = allSuppressions.filter(s => s.scope === 'tenant')
+        suppressedGlobalFps = globalSuppFps
+        suppressedTenantSupps = tenantSupps
+        suppressedFps = [...new Set([...globalSuppFps, ...tenantSupps.map(s => s.fingerprint)])]
+        const suppressedOR = [
+          ...(globalSuppFps.length > 0 ? [{ fingerprint: { in: globalSuppFps } }] : []),
+          ...tenantSupps.map(s => ({ fingerprint: s.fingerprint, projectId: s.tenantValue ?? undefined })),
+        ]
         issues = await db.issue.findMany({
           where: {
             ...where,
-            fingerprint: { in: fpList },
+            ...(suppressedOR.length > 0 ? { OR: suppressedOR } : { id: 'none' }),
             ...(lean ? { brief: { lean } } : {}),
           },
           include: {
@@ -280,7 +298,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `Invalid view: ${view}` }, { status: 400 })
     }
 
-    const total = await countIssues(view, where, lean, inboxGlobalFps ?? [], suppressedFps ?? [], inboxTenantSuppressions ?? [])
+    const total = await countIssues(view, where, lean, inboxGlobalFps ?? [], suppressedGlobalFps, inboxTenantSuppressions ?? [], suppressedTenantSupps)
 
     return NextResponse.json({
       issues: issues.map(formatIssue),

@@ -67,8 +67,16 @@ export async function ingestIssues(opts: {
     ? new Date(meta.lastPullAt)
     : new Date(Date.now() - COLD_START_HOURS * 3_600_000);
 
-  const suppressions = await db.suppression.findMany({ select: { id: true, fingerprint: true } });
-  const suppressedFps = new Map(suppressions.map((s) => [s.fingerprint, s.id]));
+  const suppressions = await db.suppression.findMany({
+    select: { id: true, fingerprint: true, scope: true, tenantValue: true },
+  });
+  // Group by fingerprint for O(1) candidate lookup per issue.
+  const suppressionsByFp = new Map<string, { id: string; scope: string; tenantValue: string | null }[]>();
+  for (const s of suppressions) {
+    const list = suppressionsByFp.get(s.fingerprint) ?? [];
+    list.push(s);
+    suppressionsByFp.set(s.fingerprint, list);
+  }
   const newIssueIds: string[] = [];
 
   for (const project of opts.projects) {
@@ -81,10 +89,13 @@ export async function ingestIssues(opts: {
           batch.map(async (si) => {
             try {
               const fingerprint = si.fingerprints?.[0] ?? si.id;
-              const suppressionId = suppressedFps.get(fingerprint);
-              if (suppressionId !== undefined) {
+              const candidates = suppressionsByFp.get(fingerprint);
+              const matchingSuppression = candidates?.find(
+                (s) => s.scope === 'global' || (s.scope === 'tenant' && s.tenantValue === project)
+              );
+              if (matchingSuppression) {
                 stats.suppressed++;
-                await db.suppression.update({ where: { id: suppressionId }, data: { lastMatchedAt: new Date() } });
+                await db.suppression.update({ where: { id: matchingSuppression.id }, data: { lastMatchedAt: new Date() } });
                 return;
               }
 
@@ -113,7 +124,7 @@ export async function ingestIssues(opts: {
                   lastSeen: new Date(si.lastSeen),
                   culprit: scrub(si.culprit ?? ""),
                   stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
-                  tags: JSON.stringify(si.tags),
+                  tags: JSON.stringify((si.tags ?? []).map(t => ({ key: t.key, value: scrub(t.value) }))),
                   statsJson,
                 },
                 update: {
@@ -123,7 +134,7 @@ export async function ingestIssues(opts: {
                   environment,
                   release,
                   stacktrace: rawStacktrace ? scrub(rawStacktrace) : null,
-                  tags: JSON.stringify(si.tags),
+                  tags: JSON.stringify((si.tags ?? []).map(t => ({ key: t.key, value: scrub(t.value) }))),
                   statsJson,
                 },
                 include: { brief: { select: { id: true } } },
@@ -174,7 +185,7 @@ export function isPipelineRunning(): boolean {
   return _pipelineRunning;
 }
 
-export async function runPipeline(opts: { background?: boolean } = {}): Promise<PipelineStats> {
+export async function runPipeline(opts: { background?: boolean } = {}): Promise<PipelineStats & { briefing?: 'background' }> {
   if (_pipelineRunning) throw new Error("Pipeline already running");
   _pipelineRunning = true;
 
@@ -189,17 +200,29 @@ export async function runPipeline(opts: { background?: boolean } = {}): Promise<
     const { stats, newIssueIds } = await ingestIssues(config);
     writeMeta({ lastPullAt: new Date().toISOString() });
 
+    // Also pick up issues that were ingested in a prior run but never briefed
+    // (e.g. LLM was down). Merge with newly ingested, dedup by ID.
+    const strandedRows = await db.issue.findMany({
+      where: { brief: null },
+      select: { id: true },
+    });
+    const strandedIds = strandedRows.map((r) => r.id).filter((id) => !newIssueIds.includes(id));
+    const allToBrief = [...newIssueIds, ...strandedIds];
+
     if (opts.background) {
-      void briefIssues(newIssueIds, stats, llmConfig)
-        .then(() => writeMeta({ lastPullStats: { ...stats, durationMs: Date.now() - startTime } }))
+      void briefIssues(allToBrief, stats, llmConfig)
         .catch((err) => console.error("[pipeline] Background brief error:", err))
-        .finally(release);
-      return { ...stats, durationMs: Date.now() - startTime };
+        .finally(() => {
+          writeMeta({ lastPullStats: { ...stats, durationMs: Date.now() - startTime }, lastCompletedAt: new Date().toISOString() });
+          release();
+        });
+      // briefed/errors reflect ingestion only at this point — briefing is still running.
+      return { ...stats, briefing: 'background' as const, durationMs: Date.now() - startTime };
     }
 
-    await briefIssues(newIssueIds, stats, llmConfig);
+    await briefIssues(allToBrief, stats, llmConfig);
     const durationMs = Date.now() - startTime;
-    writeMeta({ lastPullStats: { ...stats, durationMs } });
+    writeMeta({ lastPullStats: { ...stats, durationMs }, lastCompletedAt: new Date().toISOString() });
     release();
     return { ...stats, durationMs };
   } catch (err) {

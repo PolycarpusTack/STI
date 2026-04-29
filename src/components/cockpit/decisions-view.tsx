@@ -56,14 +56,24 @@ function downloadCSV(decisions: Decision[]) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const DATE_PRESETS = [
+  { label: "All time", days: 0 },
+  { label: "Today", days: 1 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+] as const;
+
 export function DecisionsView() {
   const [disagreementOnly, setDisagreementOnly] = useState(false);
+  const [sinceDays, setSinceDays] = useState(0);
 
-  const params = new URLSearchParams({ limit: "200" });
+  const params = new URLSearchParams({ limit: "500" });
   if (disagreementOnly) params.set("disagreement", "true");
+  if (sinceDays > 0) params.set("since", String(Date.now() - sinceDays * 86_400_000));
 
   const { data, isLoading, isError } = useQuery<DecisionsResponse, Error>({
-    queryKey: ["decisions", disagreementOnly],
+    queryKey: ["decisions", disagreementOnly, sinceDays],
     queryFn: () => fetch(`/api/decisions?${params.toString()}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     staleTime: 15_000,
   });
@@ -90,7 +100,17 @@ export function DecisionsView() {
             {total}
           </span>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
+          <select
+            value={sinceDays}
+            onChange={(e) => setSinceDays(Number(e.target.value))}
+            className="sta-select"
+            style={{ padding: "4px 8px", fontSize: "11px", height: "auto" }}
+          >
+            {DATE_PRESETS.map((p) => (
+              <option key={p.days} value={p.days}>{p.label}</option>
+            ))}
+          </select>
           <button
             className="sta-btn"
             onClick={() => setDisagreementOnly(!disagreementOnly)}

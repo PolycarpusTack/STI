@@ -8,13 +8,14 @@ const META_TMP  = META_PATH + ".tmp";
 export interface Meta {
   lastPullAt: string | null;
   lastPullStats: PipelineStats | null;
+  lastCompletedAt: string | null;
 }
 
 export function readMeta(): Meta {
   try {
     return JSON.parse(readFileSync(META_PATH, "utf-8"));
   } catch {
-    return { lastPullAt: null, lastPullStats: null };
+    return { lastPullAt: null, lastPullStats: null, lastCompletedAt: null };
   }
 }
 

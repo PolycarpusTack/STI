@@ -69,7 +69,8 @@ export async function createJiraIssue(
   }
 
   if (options.priority) {
-    fields.priority = { name: options.priority };
+    const p = options.priority;
+    fields.priority = { name: p.charAt(0).toUpperCase() + p.slice(1) };
   }
 
   if (options.component) {

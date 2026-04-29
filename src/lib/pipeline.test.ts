@@ -1,7 +1,7 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 
 const mockSettingFindUnique = mock(async () => null as { key: string; value: string } | null);
-const mockSuppressionFindMany = mock(async () => [] as { id: string; fingerprint: string }[]);
+const mockSuppressionFindMany = mock(async () => [] as { id: string; fingerprint: string; scope: string; tenantValue: string | null }[]);
 const mockSuppressionUpdate = mock(async () => ({} as { id: string }));
 const mockSentryProjectFindMany = mock(async () => [] as { slug: string }[]);
 const mockIssueUpsert = mock(async (args: { create: { sentryIssueId: string } }) => ({
@@ -9,7 +9,7 @@ const mockIssueUpsert = mock(async (args: { create: { sentryIssueId: string } })
   sentryIssueId: args.create.sentryIssueId,
   brief: null,
 }));
-const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null }));
+const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null, lastCompletedAt: null }));
 const mockWriteMeta = mock((_patch: unknown) => undefined);
 const mockGenerateBrief = mock(async (_id: string, _config?: unknown) => undefined);
 
@@ -122,7 +122,7 @@ describe("ingestIssues — fingerprint fallback", () => {
   beforeEach(() => {
     mockSuppressionFindMany.mockReset();
     mockIssueUpsert.mockReset();
-    mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null });
+    mockReadMeta.mockReturnValue({ lastPullAt: null, lastPullStats: null, lastCompletedAt: null });
     mockSuppressionFindMany.mockResolvedValue([]);
     mockIssueUpsert.mockResolvedValue({ id: "issue-1", sentryIssueId: "S-1", brief: null });
   });
@@ -159,7 +159,7 @@ describe("ingestIssues — fingerprint fallback", () => {
   });
 
   test("skips suppressed fingerprints and increments suppressed count", async () => {
-    mockSuppressionFindMany.mockResolvedValue([{ id: "sup-1", fingerprint: "fp-suppressed" }]);
+    mockSuppressionFindMany.mockResolvedValue([{ id: "sup-1", fingerprint: "fp-suppressed", scope: "global", tenantValue: null }]);
     const issue = makeSentryIssue("S-100", ["fp-suppressed"]);
     globalThis.fetch = mock()
       .mockImplementationOnce(() => jsonResponse([issue]));

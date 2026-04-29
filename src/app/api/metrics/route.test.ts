@@ -15,8 +15,11 @@ mock.module("@/lib/db", () => ({
   },
 }));
 
-const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null }));
-mock.module("@/lib/meta", () => ({ readMeta: mockReadMeta }));
+const mockReadMeta = mock(() => ({ lastPullAt: null, lastPullStats: null, lastCompletedAt: null }));
+mock.module("@/lib/meta", () => ({ readMeta: mockReadMeta, writeMeta: mock(() => {}) }));
+
+const mockIsPipelineRunning = mock(() => false);
+mock.module("@/lib/pipeline", () => ({ isPipelineRunning: mockIsPipelineRunning }));
 
 const mockGetEffectiveSetting = mock(() => Promise.resolve(null));
 mock.module("@/lib/settings", () => ({
@@ -26,6 +29,7 @@ mock.module("@/lib/settings", () => ({
     sentryOrg: "sentry.org",
     sentryProject: "sentry.project",
     llmModel: "llm.model",
+    pollIntervalMinutes: "poll.intervalMinutes",
   },
 }));
 

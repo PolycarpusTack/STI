@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -77,17 +77,18 @@ export function JiraModal() {
     }
   }, [issue]);
 
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    if (wasOpen.current && !jiraModalOpen) {
-      setSummary("");
-      setDescription("");
-      setPriority("medium");
-      setComponent("");
-      setJiraSubmitError(null);
-    }
-    wasOpen.current = jiraModalOpen;
-  }, [jiraModalOpen]);
+  const resetForm = () => {
+    setSummary("");
+    setDescription("");
+    setPriority("medium");
+    setComponent("");
+    setJiraSubmitError(null);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    closeJiraModal();
+  };
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -100,23 +101,19 @@ export function JiraModal() {
           metadata: { summary, description, priority, component },
         }),
       }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
-    onSuccess: (data: { jiraKey?: string | null; decision?: { jiraError?: string | null } }) => {
+    onSuccess: (data: { jiraKey?: string | null; jiraError?: string | null }) => {
       queryClient.invalidateQueries({ queryKey: ["issue", jiraModalIssueId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
       queryClient.invalidateQueries({ queryKey: ["decisions"] });
       queryClient.invalidateQueries({ queryKey: ["nav-count"] });
 
-      if (data.decision?.jiraError) {
-        setJiraSubmitError(data.decision.jiraError);
+      if (data.jiraError) {
+        setJiraSubmitError(data.jiraError);
         return;
       }
 
-      setJiraSubmitError(null);
-      setSummary("");
-      setDescription("");
-      setPriority("medium");
-      setComponent("");
+      resetForm();
 
       if (data.jiraKey) {
         toast({ title: `Jira ticket created`, description: data.jiraKey });
@@ -126,7 +123,7 @@ export function JiraModal() {
   });
 
   return (
-    <DialogPrimitive.Root open={jiraModalOpen} onOpenChange={(open) => !open && closeJiraModal()}>
+    <DialogPrimitive.Root open={jiraModalOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="sta-modal-overlay" />
         <DialogPrimitive.Content
@@ -211,7 +208,7 @@ export function JiraModal() {
             )}
 
             <div className="sta-modal-footer">
-              <button className="sta-btn" onClick={closeJiraModal} disabled={submitMutation.isPending}>
+              <button className="sta-btn" onClick={handleClose} disabled={submitMutation.isPending}>
                 Cancel
               </button>
               <button

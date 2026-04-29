@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useCockpitStore } from "@/lib/store";
 import type { Issue } from "@/lib/types";
@@ -49,6 +49,7 @@ function IssueRow({
   isChecked,
   selectMode,
   onCheck,
+  onRegenerateBrief,
 }: {
   issue: Issue;
   isSelected: boolean;
@@ -57,6 +58,7 @@ function IssueRow({
   isChecked: boolean;
   selectMode: boolean;
   onCheck: (checked: boolean) => void;
+  onRegenerateBrief?: (id: string) => void;
 }) {
   const lean = issue.lean ?? "";
   const conf = confidenceLevel(issue.confidence);
@@ -115,11 +117,21 @@ function IssueRow({
           }}>noise</span>
         )}
         {issue.brief?.parseError && (
-          <span style={{
-            fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.1em",
-            textTransform: "uppercase", color: "#F87171",
-            background: "rgba(248,113,113,0.08)", padding: "2px 5px", borderRadius: "2px",
-          }}>err</span>
+          <button
+            title="Brief parse error — click to regenerate"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onRegenerateBrief && window.confirm("Delete the current brief and generate a new one?")) {
+                onRegenerateBrief(issue.id);
+              }
+            }}
+            style={{
+              fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "9px", letterSpacing: "0.1em",
+              textTransform: "uppercase", color: "#F87171",
+              background: "rgba(248,113,113,0.08)", padding: "2px 5px", borderRadius: "2px",
+              cursor: "pointer", border: "none",
+            }}
+          >err ↺</button>
         )}
         <span style={{
           fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)",
@@ -253,6 +265,16 @@ export function IssueList() {
   const [selectMode, setSelectMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
+
+  const rebriefMutation = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/brief/${id}`, { method: "POST" }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["issue", id] });
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+    },
+  });
+
   // Reset limit and selection when view or filters change.
   useEffect(() => {
     setLimit(50);
@@ -292,10 +314,10 @@ export function IssueList() {
       if (document.activeElement === searchInputRef.current) return;
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
-        setFocusedIndex(Math.min(focusedIndex + 1, issues.length - 1));
+        setFocusedIndex((focusedIndex + 1) % issues.length);
       } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
-        setFocusedIndex(Math.max(focusedIndex - 1, 0));
+        setFocusedIndex((focusedIndex - 1 + issues.length) % issues.length);
       } else if (e.key === "Enter" && issues[focusedIndex]) {
         e.preventDefault();
         selectIssue(issues[focusedIndex].id);
@@ -343,7 +365,7 @@ export function IssueList() {
         <span style={{
           fontFamily: "var(--font-jetbrains-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace)", fontSize: "11px", color: "#3D4F68",
         }}>
-          {total}
+          {issues.length < total ? `${issues.length} of ${total}` : total}
         </span>
         {(currentView === "inbox" || currentView === "watchlist") && (
           <button
@@ -560,6 +582,7 @@ export function IssueList() {
                   isChecked={checkedIds.has(issue.id)}
                   selectMode={selectMode}
                   onClick={() => selectIssue(issue.id)}
+                  onRegenerateBrief={(id) => rebriefMutation.mutate(id)}
                   onCheck={(checked) => {
                     setCheckedIds((prev) => {
                       const next = new Set(prev);

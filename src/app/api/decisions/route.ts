@@ -9,8 +9,12 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10), 1), 500)
     const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0)
     const disagreementsOnly = url.searchParams.get('disagreement') === 'true'
+    const sinceParam = url.searchParams.get('since')
+    const sinceDate = sinceParam ? new Date(Number(sinceParam)) : null
 
-    const where: Record<string, unknown> = {}
+    const where: Record<string, unknown> = sinceDate && !isNaN(sinceDate.getTime())
+      ? { createdAt: { gte: sinceDate } }
+      : {}
 
     let filtered: Awaited<ReturnType<typeof db.decision.findMany<{ include: { issue: { include: { brief: true } } } }>>>
     let total: number
@@ -115,22 +119,25 @@ export async function POST(request: NextRequest) {
     })
 
     let jiraKey: string | null = null
-    let jiraError: string | null = null
 
     if (decision === 'jira') {
       const jiraConfig = await getJiraConfig()
-      if (jiraConfig) {
-        try {
-          const result = await createJiraIssue({
-            summary: metadata?.summary ?? issue.title,
-            description: metadata?.description ?? undefined,
-            priority: metadata?.priority ?? undefined,
-            component: metadata?.component ?? undefined,
-          }, jiraConfig)
-          jiraKey = result.key
-        } catch (err) {
-          jiraError = err instanceof Error ? err.message : String(err)
-        }
+      if (!jiraConfig) {
+        return NextResponse.json({ jiraError: 'Jira is not configured. Set JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_KEY, and JIRA_PROJECT_KEY in Settings.' }, { status: 200 })
+      }
+      try {
+        const result = await createJiraIssue({
+          summary: metadata?.summary ?? issue.title,
+          description: metadata?.description ?? undefined,
+          priority: metadata?.priority ?? undefined,
+          component: metadata?.component ?? undefined,
+        }, jiraConfig)
+        jiraKey = result.key
+      } catch (err) {
+        // Jira failed — surface the error without recording a decision so
+        // the issue stays in the inbox and the user can retry or cancel.
+        const msg = err instanceof Error ? err.message : String(err)
+        return NextResponse.json({ jiraError: msg }, { status: 200 })
       }
     }
 
@@ -142,7 +149,6 @@ export async function POST(request: NextRequest) {
         aiLean: brief?.lean ?? null,
         responderId: responderId ?? 'responder-1',
         jiraKey,
-        jiraError,
         ...metaFields,
       },
     })
