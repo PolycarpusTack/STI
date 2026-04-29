@@ -24,6 +24,9 @@ node_modules
 .DS_Store
 *.pem
 
+# eslint
+.eslintcache
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -50,5 +53,20 @@ test
 prompt
 
 server.log
+
 # Skills directory
 /skills/
+
+# Database — contains live data and settings (API keys, decisions)
+/db/
+db/
+
+# Superpowers brainstorm working files
+.superpowers/
+
+# Leftover dev/debug files
+test-debug.js
+isolate-*.log
+
+# PID files
+*.pid

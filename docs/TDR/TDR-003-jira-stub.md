@@ -1,9 +1,10 @@
 # TDR-003 · Jira modal submits but never creates a ticket
 
 **Opened**: 2026-04-23  
+**Closed**: 2026-04-25  
 **Area**: src/app/api/decisions/route.ts, src/components/cockpit/jira-modal.tsx  
 **Interest rate**: High  
-**Status**: Open
+**Status**: Closed
 
 ## What we did
 
@@ -19,7 +20,6 @@ Jira credentials and project key were not confirmed at design time. The UI was b
 - Decision records have no Jira key, making the audit trail incomplete  
 - Trust in the tool erodes when users check Jira and see nothing  
 
-## Payoff plan
+## Resolution
 
-BACKLOG.md EPIC-1 (all four tasks).  
-Estimated effort: L (1–2 days including Jira credential setup and end-to-end test).
+Full Jira integration implemented: `src/lib/jira.ts` (`getJiraConfig`, `createJiraIssue`), decisions route calls the API and stores the returned key on the Decision record, modal shows the created ticket key. Credentials configured via Settings UI and stored in the Setting table (never committed to repo). Jira failure is graceful — decision is saved with `jiraKey: null` and `jiraError` populated.

@@ -1,9 +1,10 @@
 # TDR-002 · Prisma query logging unconditionally enabled
 
 **Opened**: 2026-04-23  
+**Closed**: 2026-04-24  
 **Area**: src/lib/db.ts  
 **Interest rate**: Medium  
-**Status**: Open
+**Status**: Closed
 
 ## What we did
 
@@ -19,7 +20,6 @@ Default copy from early scaffolding; never revisited.
 - If logs are shipped to an aggregator, query strings (including any parameter values) are stored externally  
 - Performance: string formatting overhead on every DB call  
 
-## Payoff plan
+## Resolution
 
-BACKLOG.md TASK-5.1 — two-line fix: wrap in `process.env.NODE_ENV === "development"`.  
-Estimated effort: XS (< 15 minutes).
+Fixed in `src/lib/db.ts`: `log: process.env.NODE_ENV === "development" ? ["query"] : []`. Query logging now only active in local dev.
