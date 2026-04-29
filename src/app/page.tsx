@@ -42,7 +42,7 @@ function StatusBar() {
     }}>
       <span><span style={{ color: "#4ADE80" }}>●</span> Connected</span>
       <span style={{ color: "#2E3F5C" }}>│</span>
-      <span>STA <span style={{ color: "#9BAAC4" }}>v0.3</span></span>
+      <span>STA <span style={{ color: "#9BAAC4" }}>v0.4</span></span>
       <span style={{ color: "#2E3F5C" }}>│</span>
       <span>Prompt <span style={{ color: "#9BAAC4" }}>v1.0.0-sentinel</span></span>
       <span style={{ color: "#2E3F5C" }}>│</span>

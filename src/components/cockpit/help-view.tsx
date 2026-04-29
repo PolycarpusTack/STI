@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "0.4";
 
 // ─── TOC structure ────────────────────────────────────────────────────────────
 
 const TOC: { label: string; links: { id: string; text: string }[] }[] = [
   {
     label: "Release Notes",
-    links: [{ id: "help-whats-new", text: "What's new in v1.0.0" }],
+    links: [{ id: "help-whats-new", text: "What's new in v0.4" }],
   },
   {
     label: "Getting Started",
@@ -25,6 +25,7 @@ const TOC: { label: string; links: { id: string; text: string }[] }[] = [
       { id: "help-watchlist", text: "Watchlist" },
       { id: "help-decisions", text: "Decisions" },
       { id: "help-suppressed", text: "Suppressed" },
+      { id: "help-team", text: "Team" },
       { id: "help-settings-view", text: "Settings" },
     ],
   },
@@ -441,32 +442,40 @@ export function HelpView() {
 
             {/* ── What's New ── */}
             <section className="sta-help-section" id="help-whats-new" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
-              <H2>What&apos;s new in v1.0.0</H2>
+              <H2>What&apos;s new in v0.4</H2>
               <P>
-                Initial release of the <Strong>Sentinel Triage Assistant</Strong>. This version establishes the full triage cockpit, Sentinel AI brief generation, Jira integration, suppression system, and the automated ingestion pipeline.
+                v0.4 adds the <Strong>Team page</Strong> — a rotation management view where the WHATS&apos;ON Support team can see who is on call this week, plan the weekly schedule, and maintain the team roster. All data is stored locally in SQLite.
               </P>
 
-              <H3>Triage Cockpit</H3>
+              <H3>Team page</H3>
               <UL>
-                <LI><Strong>Inbox view</Strong> — all pending issues with AI briefs, filterable by lean, severity, and search query.</LI>
-                <LI><Strong>Watchlist view</Strong> — issues moved to watchlist, surfaced for periodic review before committing to a ticket.</LI>
-                <LI><Strong>Decisions log</Strong> — full audit trail of every triage action taken, exportable as CSV. Shows AI vs. human disagreements.</LI>
-                <LI><Strong>Suppressed view</Strong> — manage fingerprint-based suppression rules with global or per-tenant scope.</LI>
-                <LI><Strong>Full keyboard control</Strong> — triage an issue in 1-2 keystrokes. <Code>j/k</Code> navigate, <Code>1–4</Code> decide, <Code>s</Code> suppress, <Code>u</Code> undo.</LI>
+                <LI><Strong>This Week</Strong> — a hero section at the top showing who is covering each support role this week at a glance.</LI>
+                <LI><Strong>Schedule</Strong> — a table covering 4 past weeks, the current week, and upcoming weeks. Edit any week or assign a new one with the <Strong>+ Assign Week</Strong> button.</LI>
+                <LI><Strong>Roles</Strong> — configurable support roles (defaults: Support Developer and Support Engineer). Add or remove roles as your team structure changes. New roles automatically appear as columns in the schedule and as dropdowns in the assignment modal.</LI>
+                <LI><Strong>Roster</Strong> — the full list of team members with their default role and a count of weeks on duty. Add or remove people here.</LI>
               </UL>
 
-              <H3>Sentinel AI</H3>
+              <H3>Assignment modal</H3>
               <UL>
-                <LI><Strong>Automatic briefs</Strong> — every ingested issue gets a Sentinel analysis: priority (P0–P3/Noise), issue type, affected module, tenant impact, reproduction hypothesis, and a confidence score.</LI>
-                <LI><Strong>Lean routing</Strong> — Sentinel outputs a routing decision (<Code>jira</Code>, <Code>close</Code>, <Code>watchlist</Code>, <Code>investigate</Code>) used to pre-sort the inbox.</LI>
-                <LI><Strong>Fire-and-forget brief generation</Strong> — ingestion completes immediately; briefs are generated asynchronously in the background without blocking the pipeline response.</LI>
+                <LI>Role dropdowns show only members whose default role matches — keeping the list short. A <Strong>Show all team members</Strong> link expands to the full roster if you need to assign across roles.</LI>
+                <LI>The <Strong>+ Assign Week</Strong> button adds a week picker that lists upcoming unassigned weeks. Row-level <Strong>Edit</Strong> opens the same modal pre-filled for that week.</LI>
+                <LI>An optional notes field is available for context (e.g. &quot;covering for sick leave&quot;).</LI>
               </UL>
 
-              <H3>Integrations</H3>
+              <H3>v0.3 highlights</H3>
               <UL>
-                <LI><Strong>Sentry ingestion</Strong> — connects to your Sentry project via API token, pulls unresolved issues on a configurable schedule.</LI>
-                <LI><Strong>Jira ticket creation</Strong> — one keystroke creates a Jira issue pre-populated from the Sentinel brief, with customizable summary, description, priority, and component.</LI>
-                <LI><Strong>OpenAI / custom LLM</Strong> — supports any OpenAI-compatible endpoint. Defaults to GPT-4o. Swap to a local model by setting a custom base URL in Settings.</LI>
+                <LI><Strong>Scope-aware suppression</Strong> — global (all projects) or tenant (single project) suppression rules.</LI>
+                <LI><Strong>Multi-project Sentry support</Strong> — ingest from multiple project slugs; auto-discover all accessible projects.</LI>
+                <LI><Strong>Storm detection</Strong> — banner with one-click Suppress all when a fingerprint floods the inbox.</LI>
+                <LI><Strong>Bulk triage</Strong> — select multiple issues and apply close/watchlist/investigate in one action.</LI>
+              </UL>
+
+              <H3>Earlier highlights</H3>
+              <UL>
+                <LI><Strong>Triage cockpit</Strong> — Inbox, Watchlist, Decisions log, Suppressed view, and full keyboard control (<Code>j/k</Code> navigate, <Code>1–4</Code> decide, <Code>s</Code> suppress, <Code>u</Code> undo).</LI>
+                <LI><Strong>Sentinel AI</Strong> — automatic briefs with priority (P0–Noise), issue type, module, tenant impact, reproduction hint, and confidence score.</LI>
+                <LI><Strong>Jira integration</Strong> — one keystroke creates a ticket pre-populated from the Sentinel brief.</LI>
+                <LI><Strong>Custom LLM endpoint</Strong> — any OpenAI-compatible URL, or the built-in SDK fallback.</LI>
               </UL>
             </section>
 
@@ -493,10 +502,10 @@ export function HelpView() {
             <section className="sta-help-section" id="help-quickstart" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
               <H2>5-minute quickstart</H2>
               <Steps items={[
-                "Open <strong>Settings</strong> (sidebar) and enter your Sentry DSN URL, org slug, project slug, and API token. Use the <em>Test Connection</em> button to verify token scope.",
-                "Set your <strong>LLM</strong>. If using OpenAI, enter your API key. For a local model, enter the base URL (e.g. <code>http://localhost:11434/v1</code>) and model name. The default is <code>gpt-4o</code>.",
+                "Open <strong>Settings</strong> (sidebar) and enter your Sentry auth token and organisation slug. Then add your project slug(s) under <em>Projects</em> — or click <strong>Auto-detect from Sentry</strong>. Use the <em>Test Connection</em> button to verify.",
+                "Set your <strong>LLM</strong>. For a custom or self-hosted model, enter the base URL (e.g. <code>http://localhost:11434/v1</code>) and model name. Leave the base URL blank to use the built-in SDK. The default model is <code>gpt-4o</code>.",
                 "Optionally configure <strong>Jira</strong>: enter your Jira base URL, email, API token, and project key.",
-                "Click <strong>Run Pipeline</strong> in Settings (or wait for the automatic poll) to pull your first batch of issues.",
+                "Click <strong>Run Pipeline</strong> in the sidebar (or wait for the automatic poll) to pull your first batch of issues.",
                 "Switch to the <strong>Inbox</strong>. Select an issue to read the Sentinel brief. Press <code>1</code> to draft a Jira ticket, <code>2</code> to close, <code>3</code> to investigate, or <code>4</code> to watchlist.",
               ]} />
               <Callout title="No issues showing?">
@@ -512,10 +521,18 @@ export function HelpView() {
               </P>
               <H3>Filtering</H3>
               <UL>
-                <LI><Strong>Lean filter</Strong> (toolbar) — show only issues matching a specific Sentinel routing: <Code>jira</Code>, <Code>close</Code>, <Code>watchlist</Code>, or <Code>investigate</Code>.</LI>
-                <LI><Strong>Level filter</Strong> — filter by Sentry severity level: <Code>error</Code>, <Code>warning</Code>, <Code>info</Code>.</LI>
                 <LI><Strong>Search</Strong> — press <Code>/</Code> to focus the search bar. Matches against issue title and culprit with a 300 ms debounce.</LI>
+                <LI><Strong>Project filter</Strong> — when multiple Sentry projects are configured, a dropdown lets you narrow the list to a single project or switch to <Code>Last 24h — all projects</Code>.</LI>
+                <LI><Strong>Lean filter chips</Strong> — click a lean badge (<Code>jira</Code>, <Code>close</Code>, <Code>watchlist</Code>, <Code>investigate</Code>) to show only matching issues. Click again to clear.</LI>
               </UL>
+              <H3>Storm detection</H3>
+              <P>
+                When the same fingerprint appears across a large number of issues, a <Strong>Storm detection</Strong> banner appears above the list. Each storm shows the event count, affected projects, and a <Strong>Suppress all</Strong> button that creates a global suppression rule for that fingerprint. You can dismiss a storm locally (it reappears on next refresh unless suppressed).
+              </P>
+              <H3>Bulk triage</H3>
+              <P>
+                Click <Strong>Select</Strong> in the list header to enter selection mode. Check individual issues or use <Strong>Select all</Strong> to check every visible issue. Then apply <Code>close all</Code>, <Code>watchlist all</Code>, or <Code>investigate all</Code> to the entire selection at once. Bulk Jira creation is not available — use single-issue mode (<Code>1</Code>) for tickets.
+              </P>
               <H3>Load more</H3>
               <P>The list loads 50 issues at a time. A <Strong>Load more</Strong> button appears at the bottom when additional issues exist. Changing a filter resets to page 1.</P>
               <H3>Suppressed issues</H3>
@@ -544,10 +561,10 @@ export function HelpView() {
               <P>
                 Rows where the human decision differs from Sentinel&apos;s lean are highlighted in amber. Toggle the <Strong>Disagreements only</Strong> filter to surface them. This is useful for reviewing where Sentinel is miscalibrated.
               </P>
-              <H3>Jira links</H3>
-              <P>When a Jira ticket was created, the row shows the ticket key (e.g. <Code>ENG-1234</Code>) as a clickable link.</P>
+              <H3>Jira links &amp; suppress info</H3>
+              <P>When a Jira ticket was created, the row shows the ticket key (e.g. <Code>ENG-1234</Code>). When a suppress decision was made, the row shows the suppression reason and scope (<Code>global</Code> or <Code>tenant</Code>).</P>
               <H3>Export CSV</H3>
-              <P>The <Strong>Export CSV</Strong> button downloads all decisions in the current filter set, RFC 4180 compliant. Useful for post-incident reviews and reporting.</P>
+              <P>The <Strong>Export CSV</Strong> button downloads all decisions in the current filter set, RFC 4180 compliant. Useful for post-incident reviews and reporting. The view loads the most recent 200 decisions.</P>
             </section>
 
             {/* ── Suppressed ── */}
@@ -559,16 +576,86 @@ export function HelpView() {
               <P>Use the <Strong>Delete</Strong> button on a rule to remove it. Matching issues will immediately reappear in the Inbox on next load.</P>
             </section>
 
+            {/* ── Team ── */}
+            <section className="sta-help-section" id="help-team" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
+              <H2>Team</H2>
+              <P>
+                The Team page is a rotation planner for the support team. It has four sections: <Strong>This Week</Strong>, <Strong>Schedule</Strong>, <Strong>Roles</Strong>, and <Strong>Roster</Strong>. There are no keyboard shortcuts in this view — it is an admin surface, not a triage surface.
+              </P>
+
+              <H3>This Week</H3>
+              <P>
+                Shows who is assigned to each support role in the current ISO week. If no assignment exists, the card reads &quot;— unassigned —&quot;. Click <Strong>Edit</Strong> next to the week badge to open the assignment modal pre-filled for the current week.
+              </P>
+
+              <H3>Schedule</H3>
+              <P>
+                A table covering 4 past weeks, the current week (highlighted with a teal left border), all future weeks with assignments, and 3 upcoming blank weeks. Each row shows the assignee per role, or &quot;— unassigned —&quot; in italics.
+              </P>
+              <UL>
+                <LI>Click <Strong>Edit</Strong> on a row to update an existing assignment.</LI>
+                <LI>Click <Strong>Assign</Strong> on a blank future row (or <Strong>+ Assign Week</Strong> above the table) to open the modal with a week picker.</LI>
+              </UL>
+
+              <H3>Assignment modal</H3>
+              <P>The modal is shared between editing an existing week and assigning a new one.</P>
+              <UL>
+                <LI>When assigning a new week, a <Strong>Week</Strong> dropdown at the top lists upcoming unassigned weeks (up to 12), defaulting to the nearest one.</LI>
+                <LI>Each role has its own dropdown, pre-filtered to members whose default role matches. Use <Strong>Show all team members ↓</Strong> to see everyone.</LI>
+                <LI>Leaving a role dropdown on &quot;— unassigned —&quot; is valid — not every role needs to be filled every week.</LI>
+                <LI>An optional <Strong>Notes</Strong> field is available for context (e.g. &quot;covering for sick leave&quot;, &quot;bank holiday week&quot;).</LI>
+                <LI>Click <Strong>Save</Strong> to apply. The schedule refreshes immediately.</LI>
+              </UL>
+
+              <H3>Roles</H3>
+              <P>
+                The pill list shows all configured support roles. Default roles on first load are <Strong>Support Developer</Strong> and <Strong>Support Engineer</Strong>.
+              </P>
+              <UL>
+                <LI>Click <Strong>+ Add Role</Strong> to add a new role (e.g. &quot;DevOps On-Call&quot;). It will appear as a new column in the Schedule table and a new dropdown in the assignment modal.</LI>
+                <LI>Click <Strong>✕</Strong> on a role pill to remove it. You will be asked to confirm. Roles assigned in the current or a future week cannot be removed — move or clear those assignments first.</LI>
+              </UL>
+
+              <H3>Roster</H3>
+              <P>
+                Lists all team members with their default role and a <Strong>Weeks on duty</Strong> count (distinct weeks they appear in the rota, regardless of role).
+              </P>
+              <UL>
+                <LI>Click <Strong>+ Add Person</Strong> to add a team member. Optionally assign a default role — this pre-populates the assignment modal&apos;s dropdown for that role.</LI>
+                <LI>Click <Strong>✕</Strong> to remove a member. You will be asked to confirm. Members assigned in the current or a future week cannot be removed — update the rota first.</LI>
+                <LI>Past rota entries are kept for history even after a member or role is removed.</LI>
+              </UL>
+
+              <Callout title="Roles drive the assignment modal">
+                <p>The roles you configure here become the dropdowns in the assignment modal. If you add a &quot;DevOps On-Call&quot; role, a DevOps dropdown appears automatically. Members assigned that default role will appear in the dropdown first; others are one click away via <strong>Show all team members ↓</strong>.</p>
+              </Callout>
+            </section>
+
             {/* ── Settings view ── */}
             <section className="sta-help-section" id="help-settings-view" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
               <H2>Settings</H2>
+              <H3>Sentry Connection</H3>
               <UL>
-                <LI><Strong>Sentry Configuration</Strong> — DSN URL, org slug, project slug, and auth token. Each field is validated independently; use <em>Test Connection</em> to run a live scope check before saving.</LI>
-                <LI><Strong>LLM Configuration</Strong> — base URL, API key, and model name. Leave base URL blank to use the built-in client. Set a custom URL to proxy through your own LLM deployment or use a local model (Ollama, LM Studio, etc.).</LI>
-                <LI><Strong>Jira Integration</Strong> — base URL (e.g. <Code>https://yourorg.atlassian.net</Code>), email, API token, and project key. Leave blank to disable Jira; decisions will still record but no ticket will be created.</LI>
-                <LI><Strong>Poll Interval</Strong> — how often the background poller runs the ingestion pipeline, in minutes. Minimum is 1 minute. Changes take effect on the next tick without restart.</LI>
-                <LI><Strong>Run Pipeline</Strong> — manually trigger an immediate ingestion run. Useful after first-time configuration.</LI>
+                <LI><Strong>Auth Token</Strong> — your Sentry API token (starts with <Code>sntrys_</Code>). Generate at sentry.io → Settings → Auth Tokens. Needs <Code>project:read</Code> scope.</LI>
+                <LI><Strong>Organisation slug</Strong> — the URL slug of your Sentry org (visible in the Sentry URL).</LI>
+                <LI><Strong>Projects</Strong> — add one slug per Sentry project to ingest. Use <Strong>Auto-detect from Sentry</Strong> to pull all accessible projects automatically. Test Connection verifies your token against the first configured project.</LI>
               </UL>
+              <H3>AI / LLM Runtime</H3>
+              <UL>
+                <LI><Strong>Base URL</Strong> — leave blank to use the built-in SDK. Set a custom URL to proxy through your own deployment or use a local model (Ollama, LM Studio, etc.).</LI>
+                <LI><Strong>API Key</Strong> and <Strong>Model</Strong> — any OpenAI-compatible model ID (e.g. <Code>gpt-4o</Code>, <Code>gpt-4o-mini</Code>, <Code>deepseek-chat</Code>). Default is <Code>gpt-4o</Code>.</LI>
+              </UL>
+              <H3>Jira</H3>
+              <UL>
+                <LI>Base URL (e.g. <Code>https://yourorg.atlassian.net</Code>), Atlassian email, API token, and project key. Leave blank to disable Jira; decisions still record but no ticket is created.</LI>
+              </UL>
+              <H3>Pipeline</H3>
+              <UL>
+                <LI><Strong>Poll interval</Strong> — how often the background poller runs, in minutes. Minimum 1, maximum 1440 (24 h). Changes take effect on the next tick without restart.</LI>
+              </UL>
+              <Callout title="Run Pipeline button">
+                <p>The <strong>Run Pipeline</strong> button is in the <strong>sidebar</strong> (bottom-left), not in Settings. Click it any time to trigger an immediate ingestion run — useful after first-time configuration.</p>
+              </Callout>
             </section>
 
             {/* ── Triage Flow ── */}
@@ -595,6 +682,7 @@ export function HelpView() {
                 [["j"], "Move focus down in the issue list"],
                 [["k"], "Move focus up in the issue list"],
                 [["↑", "↓"], "Navigate issue list (arrow keys)"],
+                [["Enter"], "Select focused issue (open detail panel)"],
                 [["1"], "Draft Jira ticket for selected issue"],
                 [["2"], "Close / dismiss selected issue"],
                 [["3"], "Mark selected issue as Investigate"],
@@ -698,14 +786,10 @@ export function HelpView() {
             {/* ── Sentry ── */}
             <section className="sta-help-section" id="help-sentry" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
               <H2>Sentry connection</H2>
-              <P>STA ingests from Sentry using the <Strong>Issues API</Strong>. The token must have the following scopes:</P>
-              <UL>
-                <LI><Code>project:read</Code> — to validate the token and access project metadata</LI>
-                <LI><Code>event:read</Code> — to read issues and their event data</LI>
-              </UL>
-              <P>STA validates both scopes on save: it hits <Code>/api/0/projects/</Code> and <Code>/projects/{"{org}/{project}"}/issues/</Code>. A 403 on the issues endpoint means <Code>project:read</Code> is present but <Code>event:read</Code> is missing.</P>
+              <P>STA ingests from Sentry using the <Strong>Issues API</Strong>. The token must have the <Code>project:read</Code> scope to access issue data and project metadata.</P>
+              <P>Use the <Strong>Test Connection</Strong> button in Settings to verify your token against the first configured project. A 403 response means the token lacks the required scope.</P>
               <H3>What gets ingested</H3>
-              <P>STA pulls unresolved issues filtered to the configured environment (default: <Code>production</Code>). Issues are deduplicated by Sentry issue ID — re-ingesting will not create duplicates.</P>
+              <P>STA pulls unresolved issues updated since the last successful run. On the <Strong>first run</Strong> (cold start), STA looks back <Strong>7 days</Strong> to populate the inbox. Issues are deduplicated by Sentry issue ID — re-ingesting will not create duplicates.</P>
               <H3>Rate limits</H3>
               <P>Sentry&apos;s API is rate-limited. If you ingest large projects at high poll frequency, you may hit limits. The pipeline logs 429 errors to the server console. Increase the poll interval if this occurs.</P>
             </section>
@@ -759,10 +843,10 @@ export function HelpView() {
             <section className="sta-help-section" id="help-llm-config" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
               <H2>LLM configuration</H2>
               <P>STA supports any OpenAI-compatible chat completions endpoint. The default model is <Code>gpt-4o</Code>.</P>
-              <H3>Using OpenAI directly</H3>
-              <P>Leave <Strong>LLM Base URL</Strong> blank and set your <Code>OPENAI_API_KEY</Code> environment variable or enter the key in Settings.</P>
-              <H3>Using a custom endpoint</H3>
-              <P>Set the <Strong>LLM Base URL</Strong> to your proxy or local server URL, e.g. <Code>http://localhost:11434/v1</Code> for Ollama or <Code>http://localhost:1234/v1</Code> for LM Studio. Set the model name to match the model you have loaded.</P>
+              <H3>Built-in SDK (no base URL)</H3>
+              <P>Leave <Strong>LLM Base URL</Strong> blank to use the built-in <Code>z-ai-web-dev-sdk</Code> client, which reads credentials from the local <Code>.z-ai-config</Code> file. Set the model name to any model supported by the SDK (default: <Code>gpt-4o</Code>).</P>
+              <H3>Custom endpoint</H3>
+              <P>Set <Strong>LLM Base URL</Strong> to any OpenAI-compatible URL, e.g. <Code>http://localhost:11434/v1</Code> for Ollama or <Code>http://localhost:1234/v1</Code> for LM Studio. Also set the <Strong>API Key</Strong> and <Strong>Model</Strong> to match your deployment.</P>
               <Callout title="Model quality matters">
                 <p>Sentinel&apos;s prompt is designed for a frontier model (GPT-4o, Claude 3.5+, Gemini 1.5 Pro). Smaller local models may produce valid JSON but lower-quality classifications. Test with a few known issues before relying on a local model in production.</p>
               </Callout>
@@ -772,7 +856,7 @@ export function HelpView() {
             <section className="sta-help-section" id="help-poll-interval" style={{ marginBottom: "48px", scrollMarginTop: "20px" }}>
               <H2>Poll interval</H2>
               <P>
-                The poll interval controls how often the background poller runs the ingestion pipeline. The default is <Strong>10 minutes</Strong>. The minimum is 1 minute.
+                The poll interval controls how often the background poller runs the ingestion pipeline. The default is <Strong>10 minutes</Strong>. The minimum is 1 minute and the maximum is 1440 minutes (24 hours).
               </P>
               <P>Changes to the poll interval take effect on the next scheduled tick — no server restart required. The poller re-reads the setting from the database before each sleep cycle.</P>
               <Callout title="High-volume projects">
@@ -794,8 +878,8 @@ export function HelpView() {
 
               <H3>Pipeline status shows NOT CONFIGURED</H3>
               <UL>
-                <LI>Open Settings and verify Sentry DSN URL, org slug, project slug, and auth token are all filled in.</LI>
-                <LI>Click <em>Test Connection</em> to check token scopes. A 403 on the issues endpoint means <Code>event:read</Code> scope is missing.</LI>
+                <LI>Open Settings and verify your auth token, org slug, and at least one project slug are all filled in.</LI>
+                <LI>Click <em>Test Connection</em> to check token validity. A 403 response means the token lacks <Code>project:read</Code> scope.</LI>
               </UL>
 
               <H3>Briefs show &quot;Failed to parse LLM response&quot;</H3>
